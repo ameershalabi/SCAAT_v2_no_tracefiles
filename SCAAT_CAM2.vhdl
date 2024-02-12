@@ -1,0 +1,243 @@
+--------------------------------------------------------------------------------
+-- Title       : Reset Capable Content Addressable Memory (RC-CAM)
+-- Project     : SCAAT
+--------------------------------------------------------------------------------
+-- File        : SCAAT_CAM2.vhdl
+-- Author      : Ameer Shalabi <ameer.shalabi@taltech.ee>
+-- Company     : Tallinn University of Technology
+-- Created     : Thu Oct 14 00:00:00 2020
+-- Last update : Mon Mar  8 10:35:03 2021
+-- Platform    : -
+-- Standard    : <VHDL-2008 | VHDL-2002 | VHDL-1993 | VHDL-1987>
+--------------------------------------------------------------------------------
+-------------------------------------------------------------------------------
+-- Description: A CAM with a dedicated force reset (f_rst_in) port.
+--------------------------------------------------------------------------------
+
+library ieee;
+use ieee.std_logic_1164.all;
+use ieee.std_logic_unsigned.all; -- for addition & counting
+use ieee.numeric_std.all;        -- for type conversions
+use ieee.math_real.all;          -- for the ceiling and log constant calculation functions
+
+--use work.SCAAT_pkg.all;
+use work.amshal_misc_pkg.all;
+
+entity SCAAT_CAM2 is
+	generic (
+		cam_depth    : natural := 64;
+		cam_width    : natural := 4;
+		cam_addr_len : natural := 6
+	);
+	port (
+		clk      : in  std_logic;
+		rst      : in  std_logic;
+		f_rst_in : in  std_logic;
+		en_CAM   : in  std_logic;
+		cam_addr : in  unsigned(cam_addr_len-1 downto 0); -- address location in memeory
+		cam_data : in  unsigned(cam_width-1 downto 0);    -- data
+		data_out : out unsigned(cam_addr_len-1 downto 0); -- data out
+		hit_out  : out std_logic                          -- CAM_hit (found in SCAAT)
+	);
+end SCAAT_CAM2;
+
+architecture SCAAT_CAM2_arc of SCAAT_CAM2 is
+	--------------------------------------------------------------------------------
+	-- Constants
+	--------------------------------------------------------------------------------
+	constant rst_value     : unsigned (cam_width-1 downto 0)         := (others => '1');
+	constant rst_reg_value : std_logic_vector (cam_width-1 downto 0) := (others => '1');
+
+	-- number of required encoders for output
+	constant num_enc : integer := CAM_enc_num(cam_depth);
+
+	--------------------------------------------------------------------------------
+	-- Arrays and array access signbals
+	--------------------------------------------------------------------------------
+	type SCAAT_CAM_r is array (cam_depth - 1 downto 0) of std_logic_vector(cam_width-1 downto 0);
+	signal SCAAT_CAM_reg : SCAAT_CAM_r;
+
+	type READ_Encoders_in is array (num_enc-1 downto 0) of std_logic_vector(31 downto 0);
+	signal READ_enc_in : READ_Encoders_in;
+
+	type READ_Encoders_out is array (num_enc-1 downto 0) of std_logic_vector(4 downto 0);
+	signal READ_enc_out : READ_Encoders_out;
+
+	--type SCAAT_CAM_mem is array (cam_depth - 1 downto 0) of unsigned(cam_width-1 downto 0);
+	--	create the access signal to the array
+	--signal SCAAT_CAM_accs : SCAAT_CAM_mem;
+
+	--type READ_Encoders_mux is array (num_enc-1 downto 0, 4 downto 0) of std_logic;
+	--signal READ_enc_out_mux : READ_Encoders_mux;
+	--------------------------------------------------------------------------------
+	--  Signals
+	--------------------------------------------------------------------------------
+
+	-- signal for write location
+	signal location : natural range 0 to cam_depth - 1;
+
+	signal data_in     : unsigned(cam_width-1 downto 0);
+	signal reg_data_in : std_logic_vector(cam_width-1 downto 0);
+	-- signal to carry output
+
+	signal CAM_hit : std_logic;
+
+	signal CAM_hit_temp     : unsigned(cam_depth-1 downto 0);
+	signal CAM_hit_temp_enc : unsigned(31 downto 0);
+
+	--signal CAM_hit_vec_mul        : unsigned(cam_depth-1 downto 0);
+	signal local_f_rst_proc   : std_logic;
+	signal local_f_rst_v      : unsigned(cam_depth-1 downto 0);
+	signal local_f_rst_v_temp : unsigned(cam_depth-1 downto 0);
+
+	signal global_f_rst_proc   : std_logic;
+	signal global_f_rst_v      : unsigned(cam_depth-1 downto 0);
+	signal global_f_rst_v_temp : unsigned(cam_depth-1 downto 0);
+
+	signal f_rst_check    : std_logic;
+	signal CAM_read_hit_v : unsigned(cam_depth-1 downto 0);
+	-- Encoder Signals
+	signal read_CAM  : unsigned (cam_addr_len-1 downto 0);
+	signal read_CAM2 : unsigned (cam_addr_len-1 downto 0);
+	--signal read_CAM_outbound_mux : std_logic_vector(4 downto 0);
+	signal read_CAM_outbound : std_logic_vector (4 downto 0);
+
+	signal G_L_f_rst_v : unsigned(cam_depth-1 downto 0);
+	signal enable_v    : unsigned(cam_depth-1 downto 0);
+
+	signal decoder_in : unsigned(cam_addr_len-1 downto 0);
+
+	signal decoder_out : std_logic_vector((2**(cam_addr_len))-1 downto 0);
+
+	--signal selector : natural;
+
+	signal CAM_encs_hit : std_logic_vector(log2ceil(num_enc)-1 downto 0);
+	signal enc_sel_out  : std_logic_vector(4 downto 0);
+	signal enc_sel_in   : std_logic_vector(31 downto 0);
+
+begin
+
+	location   <= to_integer(cam_addr);
+	decoder_in <= cam_addr;
+	-- data in
+	data_in     <= cam_data;
+	reg_data_in <= std_logic_vector(cam_data);
+	--------------------------------------------------------------------------------
+	--  write enable and reset circuits
+	--------------------------------------------------------------------------------
+
+	FOR_GEN_L_G_f_rst_sig : for lg_rst in cam_depth-1 downto 0 generate
+		G_L_f_rst_v(lg_rst) <= (global_f_rst_v(lg_rst) or local_f_rst_v(lg_rst));
+	end generate FOR_GEN_L_G_f_rst_sig;
+
+	FOR_GEN_enable_vector : for en_loc in cam_depth-1 downto 0 generate
+		enable_v(en_loc) <= decoder_out(en_loc) and en_CAM and not G_L_f_rst_v(en_loc);
+	end generate FOR_GEN_enable_vector;
+
+		cam_addr_decoder : DEC_generic generic map (cam_addr_len) port map (decoder_in,decoder_out);
+
+	FOR_GEN_regs : for reg_id in cam_depth-1 downto 0 generate
+		reg : REG_generic_f_rst
+			generic map (cam_width,'0')
+			port map (clk,rst,G_L_f_rst_v(reg_id),rst_reg_value,enable_v(reg_id),reg_data_in,SCAAT_CAM_reg(reg_id));
+	end generate FOR_GEN_regs;
+
+	--------------------------------------------------------------------------------
+	-- generate encoders when number of CAM lines are less or equal to 32
+	--------------------------------------------------------------------------------
+	--> A process that assigns input to the encoder
+	cam_hit_temp_enc_assign : process (CAM_read_hit_v)
+	begin
+		enc_sel_in                     <= (others => '0');
+		enc_sel_in(num_enc-1 downto 0) <= std_logic_vector(CAM_read_hit_v((2*num_enc)-1 downto num_enc));
+	end process cam_hit_temp_enc_assign;
+
+	IF_GEN_ENC_0_input : if (num_enc = 1) generate
+		FOR_GEN_0_ENC_INPUT : for hit_temp_loc in cam_depth-1 downto 0 generate
+			CAM_hit_temp_enc(hit_temp_loc) <= CAM_hit_temp(hit_temp_loc);
+		end generate FOR_GEN_0_ENC_INPUT;
+	end generate IF_GEN_ENC_0_input;
+
+	--> GENERATE the enc_r encoder to read output
+	IF_GEN_ENC_0 : if (num_enc = 1) generate
+		enc_r : OR_ARRAY_32x5_Enc
+			port map (std_logic_vector(CAM_hit_temp_enc) , read_CAM_outbound);
+		read_CAM <= unsigned(read_CAM_outbound(cam_addr_len-1 downto 0));
+	end generate IF_GEN_ENC_0;
+
+	--------------------------------------------------------------------------------
+	-- generate encoders when number of CAM lines are greater than 32
+	--------------------------------------------------------------------------------
+	--> GENERATE the input signals to each of the encoders
+	IF_GEN_encoder_in_1 : if (num_enc /= 1) generate
+		GEN_encs_arr_in : for numEnc in num_enc-1 downto 0 generate
+			GEN_IF_ENC_in_1 : if ((32*(numEnc))-1) < cam_depth-1 generate
+				READ_enc_in(numEnc) <= std_logic_vector(CAM_hit_temp((32*(numEnc+1))-1 downto 32*(numEnc)));
+			end generate GEN_IF_ENC_in_1;
+		end generate GEN_encs_arr_in;
+	end generate IF_GEN_encoder_in_1;
+
+	--> GENERATE the enc_read encoders to extract the location of the hit in CAD lines
+	--> GENERATE the enc_sel encoder to determine which encoder output is CAD hit
+	IF_GEN_ENC_01 : if (num_enc /= 1) generate
+		FOR_GEN_enc1 : for encoder in num_enc-1 downto 0 generate
+			enc_read : OR_ARRAY_32x5_Enc
+				port map (READ_enc_in(encoder),READ_enc_out(encoder));
+		end generate FOR_GEN_enc1;
+		--will work up to 32 encoders i.e. until there are 1024 location in the CAM
+		-- in whcih case, SRAM cells should be used instead of regs
+		--enc_sel_in(num_enc-1 downto 0) <= std_logic_vector(CAM_read_hit_v((2*num_enc)-1 downto num_enc));
+		enc_sel : OR_ARRAY_32x5_Enc
+			port map (enc_sel_in,enc_sel_out);
+		CAM_encs_hit <= enc_sel_out(log2ceil(num_enc)-1 downto 0);
+	end generate IF_GEN_ENC_01;
+
+	--> GENERATE READ signal from the encoder output
+	IF_GEN_multi_ENC_array : if (num_enc /= 1) generate
+		read_CAM(4 downto 0)              <= unsigned(READ_enc_out(to_integer(unsigned(CAM_encs_hit))));
+		read_CAM(cam_addr_len-1 downto 5) <= unsigned(CAM_encs_hit);
+	end generate IF_GEN_multi_ENC_array;
+
+	--------------------------------------------------------------------------------
+	--  read process
+	--------------------------------------------------------------------------------
+
+	FOR_GEN_HIT_F_RST_vectors : for leaf in cam_depth-1 downto 0 generate
+		CAM_hit_temp(leaf) <= '1' when (SCAAT_CAM_reg(leaf) = reg_data_in) else '0';
+
+		local_f_rst_v(leaf) <= '1' when (CAM_hit_temp(leaf)) = '1' and en_CAM ='1' and (leaf /= location) else '0';
+
+		global_f_rst_v(leaf) <= '1' when (CAM_hit_temp(leaf)) = '1' and f_rst_in ='1' else '0';
+	end generate FOR_GEN_HIT_F_RST_vectors;
+
+	--------------------------------------------------------------------------------
+	-- generate the vector used to read from tree 
+	--------------------------------------------------------------------------------
+
+	for_gen_hit_signal_v_1 : for tree_read_loc in cam_depth-2 downto 0 generate -- max depth
+		if_gen_hit_signal_v_2 : if (tree_read_loc mod 2) = 0 generate
+			CAM_read_hit_v(tree_read_loc/2 + 2**(log2ceil(cam_depth)-1))      <= CAM_hit_temp(tree_read_loc) or CAM_hit_temp(tree_read_loc+1);
+			--local_f_rst_v_temp(tree_read_loc/2 + 2**(log2ceil(cam_depth)-1))  <= local_f_rst_v(tree_read_loc) or local_f_rst_v(tree_read_loc+1);
+			--global_f_rst_v_temp(tree_read_loc/2 + 2**(log2ceil(cam_depth)-1)) <= global_f_rst_v(tree_read_loc) or global_f_rst_v(tree_read_loc+1);
+		end generate if_gen_hit_signal_v_2;
+	end generate for_gen_hit_signal_v_1;
+
+	for_gen_hit_signal_v_3 : for MUX_enable_index in cam_depth-2 downto 0 generate -- max depth
+		if_gen_hit_signal_v_6 : if (MUX_enable_index mod 2) = 0 generate
+			CAM_read_hit_v(MUX_enable_index/2)      <= CAM_read_hit_v(MUX_enable_index) or CAM_read_hit_v(MUX_enable_index+1);
+			--local_f_rst_v_temp(MUX_enable_index/2)  <= local_f_rst_v_temp(MUX_enable_index) or local_f_rst_v_temp(MUX_enable_index+1);
+			--global_f_rst_v_temp(MUX_enable_index/2) <= global_f_rst_v_temp(MUX_enable_index) or global_f_rst_v_temp(MUX_enable_index+1);
+		end generate if_gen_hit_signal_v_6;
+	end generate for_gen_hit_signal_v_3;
+
+	CAM_hit <= CAM_read_hit_v(1);
+	-- are not used!
+	--global_f_rst_proc <= global_f_rst_v_temp(1);
+	--local_f_rst_proc <= local_f_rst_v_temp(1);
+	--f_rst_check <= local_f_rst_proc or global_f_rst_proc;
+
+	hit_out <= CAM_hit;
+
+	data_out <= read_CAM;
+
+end SCAAT_CAM2_arc;

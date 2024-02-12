@@ -1,0 +1,147 @@
+
+vlib PoC
+vlib work
+# Include files and compile them
+do "./PoC_lib_files/PoC_1.do"
+
+vlog -sv -work PoC "bindings.sva"
+# vlog -sv -work PoC "../jaspergold/direct_mapped_cache_properties.sva"
+vlog -sv -work PoC "direct_mapped_cache_properties_form2.sva"
+# vlog -sv -work PoC "../jaspergold/set_associative_cache_properties.sva"
+vcom -2008 -work PoC "./PoC_lib_files/cache_cpu.vhdl"
+
+#######AMSHAL
+#
+set amshal_pkg_dir /home/amshal/pc/Projects/amshal_misc/
+set CLD_IRQ_comp /home/amshal/pc/Projects/CLD/
+
+#do "/home/amshal/pc/Projects/amshal_misc/compile_amshal_misc_pkg.do" 
+#vcom -2008 -work amshal_pkg_dir ${amshal_pkg_dir}/*.vhdl 
+
+vcom -2008 -work PoC "SCAAT_pkg.vhdl"
+
+vcom -2008 -work PoC "${amshal_pkg_dir}/SCAAT_pkg.vhdl"
+vcom -2008 -work PoC "${amshal_pkg_dir}/amshal_misc_pkg.vhdl"
+
+vcom -2008 -work PoC "${amshal_pkg_dir}/*.vhdl"
+
+
+
+
+#vcom -2008 -work PoC "OR_ARRAY_32x5_Enc_no_opt.vhdl"
+vlog -work PoC "cache_security.v"
+vcom -2008 -work PoC "SCAAT_CAM.vhdl"
+vcom -2008 -work PoC "SCAAT_CAM2.vhdl"
+vcom -2008 -work PoC "SCAAT_mem3.vhdl"
+vcom -2008 -work PoC "SCAAT_mem4.vhdl"
+vcom -2008 -work PoC "SCAAT_mem5.vhdl"
+
+vcom -2008 -work PoC "Rand_Gen_LFSR.vhdl"
+vcom -2008 -work PoC "SCAAT_unit2.vhdl"
+vcom -2008 -work PoC "SCAAT_unit2_R.vhdl"
+vcom -2008 -work PoC "SI_FSM.vhdl"
+
+vcom -2008 -work PoC "cache_cpu_SCAAT.vhdl"
+#######AMSHAL
+do "./PoC_lib_files/PoC_2.do"
+
+# vcom -2008 -work PoC "cache_cpu.vhdl" -pslfile "../jaspergold/direct_mapped_cache_properties.psl"
+# vcom -2008 -work PoC "cache_cpu.vhdl" -pslfile "../jaspergold/set_associative_cache_properties.psl"
+vcom -2008 -work PoC "cache_cpu_wrapper.vhdl"
+
+
+#vcom -2008 -work PoC "cache_cpu_benchmarks_tb.vhdl"
+#vcom -2008 -work PoC "cache_cpu_benchmarks_tb2.vhdl"
+#vcom -2008 -work PoC "cache_cpu_benchmarks_tb_hist_only.vhdl"
+vcom -2008 -work PoC "cache_cpu_benchmarks_tb_single.vhdl"
+
+
+# vcom -2008 -work PoC "cache_mem_tb.vhdl"
+# vcom -2008 -work PoC "ocram_sp_tb.vhdl"
+
+
+# Start the simulation
+# vopt +acc cache_mem -o top_opt -debugdb
+vsim -assertdebug -vopt -debugDB PoC.cache_cpu_tb PoC.cache_cpu_v_wrapper
+#vsim PoC.cache_cpu_tb PoC.cache_cpu_v_wrapper
+#vsim PoC.cache_cpu_tb -voptargs=+acc=bcglnprst+security
+#vsim -assertdebug PoC.cache_cpu_tb PoC.cache_cpu_v_wrapper
+set StdArithNoWarnings 1
+set NumericStdNoWarnings 1
+
+#add wave -position insertpoint sim/:cache_cpu_tb:UUT:SCAAT_tbl2:*
+#add wave -position end sim:/cache_cpu_tb/cur_ctx
+#add wave -position end sim:/cache_cpu_tb/ctx_string
+#add wave -position end sim:/cache_cpu_tb/UUT/SCAAT_tbl2/*
+#add wave -position insertpoint sim/:cache_cpu_tb:UUT:SCAAT_tbl2:mem_SCAAT_R_mem:*
+#add wave -position insertpoint sim/:cache_cpu_tb:UUT:SCAAT_tbl2:mem_SCAAT_R_mem:GEN_CAM_array(0):cam:*
+#add wave -position insertpoint sim/:cache_cpu_tb:UUT:SCAAT_tbl2:mem_SCAAT_R_mem:GEN_CAM_array(0):cam:*
+
+add wave -position end sim:/cache_cpu_tb/SCAAT_addr
+#add wave -position end sim:/cache_cpu_tb/CPU_RequestGen/SCAAT_set
+#add wave -position end sim:/cache_cpu_tb/CPU_RequestGen/hist_int
+add wave -position end sim:/cache_cpu_tb/CPU_RequestGen/output_name
+#add wave -position end sim:/cache_cpu_tb/cur_ctx
+#add wave -position end sim:/cache_cpu_tb/safe_process_ID_tb
+add wave -position end sim:/cache_cpu_tb/TOTALACCESScounter
+add wave -position end sim:/cache_cpu_tb/attk
+add wave -position end sim:/cache_cpu_tb/attk_active
+add wave -position end sim:/cache_cpu_tb/IRQ
+
+#add wave -position end sim:/cache_cpu_tb/found_in_SCAAT_count_reg
+#add wave -position end sim:/cache_cpu_tb/R_active
+#add wave -position end sim:/cache_cpu_tb/SCAAT_addr_out_c
+
+#add wave -position end sim:/cache_cpu_tb/miss_arr
+#add wave -position end sim:/cache_cpu_tb/access_arr
+#add wave -position end sim:/cache_cpu_tb/MKPI_arr
+#add wave -position end sim:/cache_cpu_tb/Histogram
+#add wave -position end sim:/cache_cpu_tb/Histo_access
+#add wave -position end sim:/cache_cpu_tb/Histo_miss
+
+#add wave -position end sim:/cache_cpu_tb/f_in_SCAAT
+#add wave -position end sim:/cache_cpu_tb/found_in_SCAAT_count_reg
+#add wave -position end sim:/cache_cpu_tb/R_active
+#add wave -position end sim:/cache_cpu_tb/SCAAT_addr_out_c
+#add wave -position end sim:/cache_cpu_tb/ACCESScounter
+#add wave -position end sim:/cache_cpu_tb/miss_count
+#add wave -position end sim:/cache_cpu_tb/MPKI_miss
+#add wave -position end sim:/cache_cpu_tb/finished_while
+
+
+
+
+run -all
+#add wave -position insertpoint sim/:cache_cpu_tb:ACCESScounter
+#add wave -position insertpoint sim/:cache_cpu_tb:TOTALACCESScounter
+#add wave -position insertpoint sim/:cache_cpu_tb:miss_count
+
+#add wave -position insertpoint sim/:cache_cpu_tb:UUT:SCAAT_tbl2:LFSR_SCAAT:*
+
+#vsim -assertdebug PoC.cache_cpu_tb PoC.cache_cpu_v_wrapper
+# vsim -assertdebug -voptargs=+acc PoC.cache_cpu_tb
+# PoC.cache_cpu_verification_module
+# vsim -assertdebug PoC.cache_mem_tb
+
+#vsim -set stdArithNoWarnings 1
+#vsim -set NumericStdNoWarnings 1
+
+# atv log -enable -asserts -recursive /*
+
+# view assertions
+
+# Draw waves
+# do wave.do
+# Run the simulation
+#vcd file gcc_wrapper.vcd
+#vcd add -r -optcells /*
+#add wave -position end sim/:cache_cpu_tb:UUT:SCAAT_tbl2:mem_SCAAT_R_mem:GEN_CAM_array(0):cam:IF_GEN_multi_ENC_array:enc_out_mux:*
+
+#run 1000ns
+#run -all
+#vcd flush
+
+# save the coverage reports
+# coverage save coverage.ucdb
+
+# vcover report -assert -detail -output assertion_det.txt coverage.ucdb

@@ -1,0 +1,12 @@
+module cache_cpu_v_wrapper;
+
+	bind cache_cpu_tb  cache_cpu_verification_module cache_cpu_v (clk, rst,
+	                        cpu_req, cpu_write, cpu_addr, cache_Hit, cache_Miss,
+	                        //process_type,
+	                        cpu_got,
+	                        en_SVA,
+	                        attk,
+	                        caseNum
+	                        );
+
+endmodule

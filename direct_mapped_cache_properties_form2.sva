@@ -1,0 +1,1074 @@
+// typedef enum {READY, ACCESS_MEM, READING_MEM, UNKNOWN} T_FSM;
+//---- Best Cache Configuration for Benchmarks 
+//--  CACHE_LINES ---> 256
+//--  ASSOCIATIVITY ---> 1
+//--  MEM_ADDR_BITS ---> 27
+//--  CPU_ADDR_BITS ---> 32
+//--  MEM_DATA_BITS ---> 1024
+//--  CPU_DATA_BITS ---> 32
+//--
+module cache_cpu_verification_module #(
+                                          //parameter ASSOCIATIVITY = 1, 
+                                          //parameter CACHE_LINES = 256,
+                                      parameter ASSOCIATIVITY = 16, 
+                                      parameter CACHE_LINES = 4096, 
+                                       parameter CACHE_SETS = CACHE_LINES,// / ASSOCIATIVITY,
+                                       parameter MEM_DATA_BITS = 512, 
+                                       parameter CPU_DATA_BITS = 32, 
+                                       parameter MEM_ADDR_BITS = 28,
+                                       parameter ADDRESS_BITS = 32, 
+                                       parameter INDEX_BITS = $clog2(CACHE_SETS),
+                                       parameter TAG_BITS = MEM_ADDR_BITS - INDEX_BITS
+                                      
+
+                                       )
+(
+  clk, rst,
+  cpu_req, cpu_write, cpu_addr,
+  cache_Hit, cache_Miss, 
+  //process_type,
+  cpu_got,
+  en_SVA,
+  //AMSHAL
+  attk,
+  caseNum
+);
+
+  input logic clk, rst;
+  input logic cpu_req, cpu_write;
+  input logic unsigned [$clog2(MEM_DATA_BITS/CPU_DATA_BITS)+MEM_ADDR_BITS-1 : 0] cpu_addr;
+
+  input logic cache_Hit, cache_Miss;
+  input logic en_SVA;
+  input logic cpu_got;
+
+  //AMSHAL
+  output logic attk;
+  output logic unsigned [4:0] caseNum;
+
+
+  // Not shared address space
+
+  //  Memory Organization
+  //   .---------------.  0  -.
+  //   |               |      |_ A
+  //   |    Attacker   |      |
+  //   |               | 383 _|
+  //   |---------------| 384 -. 
+  //   |               |      |
+  //   |     Victim    |      |- V
+  //   |               | 767 _|
+  //   |---------------| 768 _
+  //   |               |      |
+  //   |       OS      |      | OS
+  //   |               |     _|
+  //   .---------------. 1023 = 2^10 - 1
+
+  // Attacker's known address range -> [0 : 323]
+
+  // Victim's address range   -> [324 : 933] 
+    // 1) Victim's known address range -> [324 : 833]
+    // 2) Victim's unknown address range, which includes sensitive (key) information! -> [834 : 933]
+
+  //localparam LOWER_BOUND = 0; //lowest possible address location
+  //localparam UPPER_BOUND = 2 ** MEM_ADDR_BITS; //highest possible address location
+  //localparam LOWER_BOUND = 3221225472; //lowest possible address location --- c
+  //localparam UPPER_BOUND = 3489660927; //highest possible address location --- c
+  
+
+  //localparam LOWER_BOUND = 3221225472; //lowest possible address location --- C
+  //localparam UPPER_BOUND = 3489660927; //highest possible address location --- C
+
+  //localparam A1_AR_LOWER_BOUND = 0;
+  //localparam A1_AR_UPPER_BOUND = 3221225472;
+
+  localparam LOWER_BOUND = 0; 
+  localparam UPPER_BOUND = 2 ** MEM_ADDR_BITS; 
+  //localparam UPPER_BOUND = 2097152; 
+
+  localparam A1_AR_LOWER_BOUND = LOWER_BOUND;
+  localparam A1_AR_UPPER_BOUND = UPPER_BOUND;
+
+  localparam V1_VR_LOWER_BOUND = LOWER_BOUND;
+  localparam V1_VR_UPPER_BOUND = UPPER_BOUND;
+
+  //localparam VX_LOWER_BOUND = LOWER_BOUND;
+  //localparam VX_UPPER_BOUND = UPPER_BOUND;
+
+  //localparam SHARED_LOWER_BOUND = LOWER_BOUND;
+  //localparam SHARED_UPPER_BOUND = UPPER_BOUND;
+
+  //localparam ATTACKER_LOWER_BOUND = LOWER_BOUND;
+  //localparam ATTACKER_UPPER_BOUND = UPPER_BOUND;
+  
+  //localparam VICTIM_LOWER_BOUND = LOWER_BOUND;
+  //localparam VICTIM_UPPER_BOUND = UPPER_BOUND;
+  // ORIGIONAL
+/*  
+  localparam A1_AR_LOWER_BOUND = 0;
+  localparam A1_AR_UPPER_BOUND = 383;
+  localparam V1_VR_LOWER_BOUND = 384;
+  localparam V1_VR_UPPER_BOUND = 767;
+  localparam VX_LOWER_BOUND = 384;
+  localparam VX_UPPER_BOUND = 767;
+  localparam SHARED_LOWER_BOUND = 834;
+  localparam SHARED_UPPER_BOUND = 933;
+
+  localparam ATTACKER_LOWER_BOUND = 0;
+  localparam ATTACKER_UPPER_BOUND = 323;
+  localparam VICTIM_LOWER_BOUND = 324;
+  localparam VICTIM_UPPER_BOUND = 933;*/
+
+
+//   ------------------------------------------------------
+//   -- Properties for Processor (CPU) to Cache interface
+//   ------------------------------------------------------
+
+ // property number_of_cache_hits;
+ ///     @(posedge clk)
+          //disable iff (rst | !en_SVA) cpu_req && cache_Hit && !cache_Miss |-> cache_Hit;
+ //         disable iff (rst | !en_SVA) cpu_req && cache_Hit |-> cache_Hit;
+ // endproperty
+
+//  A_number_of_cache_hits: assert property (number_of_cache_hits);
+
+
+  //property number_of_cache_misses;
+  //    @(posedge clk)
+          //disable iff (rst | !en_SVA) cpu_req && !cache_Hit && cache_Miss |-> cache_Miss;
+  //        disable iff (rst | !en_SVA) cpu_req && !cache_Hit |-> cache_Miss;
+  //endproperty
+
+  //A_number_of_cache_misses: assert property (number_of_cache_misses);
+
+  property number_of_cache_hits;
+      @(posedge clk)
+          disable iff (rst) cpu_req && cache_Hit && !cache_Miss |-> cache_Hit;
+  endproperty
+
+  A_number_of_cache_hits: assert property (number_of_cache_hits);
+
+
+  property number_of_cache_misses;
+      @(posedge clk)
+          disable iff (rst) cpu_req && !cache_Hit && cache_Miss |-> cache_Miss;
+  endproperty
+
+  A_number_of_cache_misses: assert property (number_of_cache_misses);
+
+  localparam RATIO = MEM_DATA_BITS/CPU_DATA_BITS;  // Ratio 1:n between CPU data bus and cache-line size (memory data bus)
+  localparam LOWER_ADDR_BITS = $clog2(RATIO);    // Number of address bits identifying the CPU data word within a cache line (memory word)
+  localparam SET_BITS = $clog2(CACHE_SETS);
+  localparam CPU_ADDR_BITS = $clog2(RATIO) + MEM_ADDR_BITS;
+// Sequences and Properties, along with assertions: 
+
+ // sequence Attacker_Miss_or_Hit;
+ //   cpu_req && !cpu_write && (process_type !=  "000") && (cache_Miss || cache_Hit);
+ // endsequence
+
+ // sequence Victim_Miss_or_Hit;
+ //   cpu_req && !cpu_write && (process_type == "000") && (cache_Miss || cache_Hit);
+ // endsequence
+
+ // sequence Attacker_Miss;
+ //   cpu_req && !cpu_write && (process_type != "000") && (cache_Miss);
+ // endsequence
+
+ // sequence Victim_Miss;
+ //   cpu_req && !cpu_write && (process_type == "000") && (cache_Miss);
+ // endsequence
+
+ // sequence Attacker_Hit;
+ //   cpu_req && !cpu_write && (process_type != "000") && (cache_Hit);
+ // endsequence
+
+ // sequence Victim_Hit;
+ //   cpu_req && !cpu_write && (process_type == "000") && (cache_Hit);
+ // endsequence
+
+/////&& en_SVA
+sequence Miss_or_Hit;
+  cpu_req && !cpu_write && (cache_Miss || cache_Hit);
+endsequence
+
+sequence Miss;
+  cpu_req && !cpu_write &&  (cache_Miss);
+endsequence
+
+sequence Hit;
+  cpu_req && !cpu_write && (cache_Hit);
+endsequence
+
+ byte process_type;
+
+//// AMSHAL
+//// This always statment checks the status of the attack signal at every access
+//// regardless of the access being a hit or a miss, if the attack signal was sent
+//// out as true before, it must be returned to false in order to get the next
+//// attack signal from the next property
+
+// make this based on a clock edge
+always @(posedge clk) begin
+      //if (en_SVA == 1) begin
+          attk = 0;
+      //    caseNum = 5'b00000;    
+      //  end
+      
+end
+
+
+// Attack cases 1 to 28
+
+// Case_1 maps to Type A attack! -> Miss-based attack!
+// Should we also check that in last step cpu_addr maps to the same cache block as unknown_address ?!
+property Case_1 (cpu_address);
+    var type(cpu_address) known_address, unknown_address;
+    var type(process_type) victim_process_id, attacker_process_id;
+
+    @(posedge clk)
+      disable iff (rst)   // step1, step2, step3 on the same cache line
+                          ((Miss_or_Hit ##0 (cpu_addr inside {[V1_VR_LOWER_BOUND : V1_VR_UPPER_BOUND]}), unknown_address = cpu_addr) ##[5:7] 
+                           (Miss        ##0 (cpu_addr inside {[A1_AR_LOWER_BOUND : A1_AR_UPPER_BOUND]}), known_address = cpu_addr) ##0 (unknown_address[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS] == known_address[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS]) ##7
+                            Miss        ##0 (cpu_addr inside {[V1_VR_LOWER_BOUND : V1_VR_UPPER_BOUND]}) && (known_address[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS] == cpu_addr[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS])) 
+      |-> cache_Miss;    
+ endproperty
+
+ A_Case_1: assert property (Case_1(cpu_addr)) begin if (attk == 0 && en_SVA == 1) begin attk = 1; caseNum = 5'b00001; end end // V_x , A_R , V_x
+
+
+// Case_2 maps to Type B attack! -> Miss-based attack!
+// Case 2 does not have any condition that is an attack, therefore, no test-bench or property generated for it. 
+
+// property Case_2 (cpu_address);
+//     var type(cpu_address) known_address, unknown_address;
+//     var type(process_type) victim_process_id1, victim_process_id2;
+
+//     @(posedge clk)
+//       disable iff (rst)    (Miss ##0 (cpu_addr inside {[V1_VR_LOWER_BOUND : V1_VR_UPPER_BOUND]}), unknown_address = cpu_addr) ##7
+//                            (Miss ##0 (cpu_addr inside {[V1_VR_LOWER_BOUND : V1_VR_UPPER_BOUND]}), known_address = cpu_addr) ##0 (unknown_address[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS] == known_address[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS]) ##7
+//                             Miss ##0 (cpu_addr inside {[V1_VR_LOWER_BOUND : V1_VR_UPPER_BOUND]}) && (known_address[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS] == cpu_addr[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS]) |-> cache_Miss;    
+//  endproperty
+
+//  A_Case_2: assert property (Case_2(cpu_addr)); // V_x , V_R , V_x
+
+
+// Case_3 maps to Type C attack! -> Hit-based attack!
+// Double-check Case_3!! 
+// Should the address of A_1 be necessarily the same as A_R ?! Or should it just map to the same cache block (line) ?!
+
+property Case_3 (cpu_address);
+    var type(cpu_address) known_address_A1, known_address_AR;
+    var type(process_type) attacker_process_id;
+
+    @(posedge clk)
+      disable iff (rst)    // step1, step2, step3 on the same cache line
+                         ((Miss_or_Hit ##0 (cpu_addr inside {[A1_AR_LOWER_BOUND : A1_AR_UPPER_BOUND]}), known_address_AR = cpu_addr) ##[5:7]
+                          (Miss_or_Hit ##0 (cpu_addr inside {[A1_AR_LOWER_BOUND : A1_AR_UPPER_BOUND]}), known_address_A1 = cpu_addr) ##0 (known_address_A1[CPU_ADDR_BITS-1 : LOWER_ADDR_BITS] == known_address_AR[CPU_ADDR_BITS-1 : LOWER_ADDR_BITS]) ##5
+                           Miss        ##0 (cpu_addr inside {[V1_VR_LOWER_BOUND : V1_VR_UPPER_BOUND]}) && (cpu_addr[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS] == known_address_A1[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS]))
+                          // or
+                           // step1 and step3 on the same cache line, but step2 on a different cache line
+                         //((Miss_or_Hit ##0 (cpu_addr inside {[A1_AR_LOWER_BOUND : A1_AR_UPPER_BOUND]}), known_address_AR = cpu_addr) ##[5:7]
+                         // (Miss_or_Hit ##0 (cpu_addr inside {[A1_AR_LOWER_BOUND : A1_AR_UPPER_BOUND]}), known_address_A1 = cpu_addr) ##0 (known_address_A1[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS] != known_address_AR[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS]) ##[5:7]
+                          // Miss        ##0 (cpu_addr inside {[V1_VR_LOWER_BOUND : V1_VR_UPPER_BOUND]}) && (cpu_addr[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS] == known_address_AR[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS]))
+                          // or
+                           // step2 and step3 on the same cache line, but step1 on a different cache line
+                         //((Miss_or_Hit ##0 (cpu_addr inside {[A1_AR_LOWER_BOUND : A1_AR_UPPER_BOUND]}), known_address_AR = cpu_addr) ##[5:7]
+                         // (Miss_or_Hit ##0 (cpu_addr inside {[A1_AR_LOWER_BOUND : A1_AR_UPPER_BOUND]}), known_address_A1 = cpu_addr) ##0 (known_address_A1[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS] != known_address_AR[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS]) ##[5:7]
+                         //  Miss        ##0 (cpu_addr inside {[V1_VR_LOWER_BOUND : V1_VR_UPPER_BOUND]}) && (cpu_addr[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS] == known_address_A1[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS]))
+                           |-> cache_Miss;    
+ endproperty
+
+ A_Case_3: assert property (Case_3(cpu_addr)) begin if (attk == 0 && en_SVA == 1) begin attk = 1; caseNum = 5'b00011;end end// A_R , A_1 , V_x
+
+
+// Case_4 maps to Type D attack! -> Hit-based attack!
+// In step 3 of the property, can the process type of Victim for Vx be the same as step 1 for V_R or they must be different ?!
+property Case_4 (cpu_address); 
+    var type(cpu_address) known_address_VR, known_address_A1;
+    var type(process_type) attacker_process_id;
+
+    @(posedge clk)
+      disable iff (rst)  // step1, step2, step3 on the same cache line  
+                         ((Miss_or_Hit ##0 (cpu_addr inside {[V1_VR_LOWER_BOUND : V1_VR_UPPER_BOUND]}), known_address_VR = cpu_addr) ##[5:7]
+                          (Miss_or_Hit        ##0 (cpu_addr inside {[A1_AR_LOWER_BOUND : A1_AR_UPPER_BOUND]}), known_address_A1 = cpu_addr) ##0 (known_address_A1[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS] == known_address_VR[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS]) ##7
+                           Miss        ##0 (cpu_addr inside {[V1_VR_LOWER_BOUND : V1_VR_UPPER_BOUND]}) && (cpu_addr[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS] == known_address_A1[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS]))
+                          // or 
+                          // step2 and step3 on the same cache line, but step1 on a different cache line
+                         //((Miss_or_Hit ##0 (cpu_addr inside {[V1_VR_LOWER_BOUND : V1_VR_UPPER_BOUND]}), known_address_VR = cpu_addr) ##[5:7]
+                         // (Miss_or_Hit ##0 (cpu_addr inside {[A1_AR_LOWER_BOUND : A1_AR_UPPER_BOUND]}), known_address_A1 = cpu_addr) ##0 (known_address_A1[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS] != known_address_VR[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS]) ##[5:7]
+                         //  Miss        ##0 (cpu_addr inside {[V1_VR_LOWER_BOUND : V1_VR_UPPER_BOUND]}) && (cpu_addr[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS] == known_address_A1[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS])) 
+                         |-> cache_Miss;    
+ endproperty
+
+ A_Case_4: assert property (Case_4(cpu_addr)) begin if (attk == 0 && en_SVA == 1) begin attk = 1; caseNum = 5'b00100;end end// V_R , A_1 , V_x
+
+
+// Case_5 maps to Type E attack! -> Hit-based attack!
+// Do both A1 operations occur using the same memory location (which map to the same cache line) ?!
+property Case_5 (cpu_address);
+    var type(cpu_address) known_address_A1_1, known_address_A1_2;
+    var type(process_type) attacker_process_id;
+
+    @(posedge clk)
+      disable iff (rst)    
+                         ((Miss_or_Hit ##0 (cpu_addr inside {[A1_AR_LOWER_BOUND : A1_AR_UPPER_BOUND]}), known_address_A1_1 = cpu_addr) ##[5:7]
+                          (Hit         ##0 (cpu_addr inside {[A1_AR_LOWER_BOUND : A1_AR_UPPER_BOUND]}), known_address_A1_2 = cpu_addr) ##0 (known_address_A1_1[CPU_ADDR_BITS-1 : LOWER_ADDR_BITS] == known_address_A1_2[CPU_ADDR_BITS-1 : LOWER_ADDR_BITS]) ##5
+                           Miss        ##0 (cpu_addr inside {[V1_VR_LOWER_BOUND : V1_VR_UPPER_BOUND]}) && (cpu_addr[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS] == known_address_A1_2[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS])) 
+                         |-> cache_Miss;    
+ endproperty
+
+ A_Case_5: assert property (Case_5(cpu_addr)) begin if (attk == 0 && en_SVA == 1) begin attk = 1; caseNum = 5'b00101;end end// A_1 , A_1 , V_x
+
+
+ // Case_6 maps to Type F attack! -> Hit-based attack!
+ // Case 6: To be double-checked!
+ // In the Truth Table, all conditions are considered as valid and attack!
+property Case_6 (cpu_address);
+    var type(cpu_address) unknown_address_Vx, known_address_A1;
+    var type(process_type) victim_process_id, attacker_process_id;
+
+    @(posedge clk)
+      disable iff (rst)   // step1, step2, step3 on the same cache line 
+                         ((Miss_or_Hit ##0 (cpu_addr inside {[V1_VR_LOWER_BOUND : V1_VR_UPPER_BOUND]}), unknown_address_Vx = cpu_addr) ##[5:7]
+                          (Miss_or_Hit        ##0 (cpu_addr inside {[A1_AR_LOWER_BOUND : A1_AR_UPPER_BOUND]}), known_address_A1 = cpu_addr) ##0 (unknown_address_Vx[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS] == known_address_A1[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS]) ##7
+                           Miss        ##0 (cpu_addr inside {[V1_VR_LOWER_BOUND : V1_VR_UPPER_BOUND]}) && (known_address_A1[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS] == cpu_addr[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS]))
+                          // or
+                          // step2 and step3 on the same cache line, but step1 on a different cache line
+                         //((Miss_or_Hit ##0 (cpu_addr inside {[V1_VR_LOWER_BOUND : V1_VR_UPPER_BOUND]}), unknown_address_Vx = cpu_addr) ##[5:7]
+                          //(Miss_or_Hit ##0 (cpu_addr inside {[A1_AR_LOWER_BOUND : A1_AR_UPPER_BOUND]}), known_address_A1 = cpu_addr) ##0 (unknown_address_Vx[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS] != known_address_A1[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS]) ##[5:7]
+                          // Hit         ##0 (cpu_addr inside {[V1_VR_LOWER_BOUND : V1_VR_UPPER_BOUND]}) && (unknown_address_Vx[CPU_ADDR_BITS-1 : LOWER_ADDR_BITS] == cpu_addr[CPU_ADDR_BITS-1 : LOWER_ADDR_BITS]))                                                    
+                          // or
+                          // step2 and step3 on the same cache line, but step1 on a different cache line
+                        // ((Miss_or_Hit ##0 (cpu_addr inside {[V1_VR_LOWER_BOUND : V1_VR_UPPER_BOUND]}), unknown_address_Vx = cpu_addr) ##[5:7]
+                         // (Miss_or_Hit ##0 (cpu_addr inside {[A1_AR_LOWER_BOUND : A1_AR_UPPER_BOUND]}), known_address_A1 = cpu_addr) ##0 (unknown_address_Vx[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS] != known_address_A1[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS]) ##[5:7]
+                         //  Miss        ##0 (cpu_addr inside {[V1_VR_LOWER_BOUND : V1_VR_UPPER_BOUND]}) && (known_address_A1[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS] == cpu_addr[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS]))                        
+                           |-> (cache_Miss || cache_Hit);    
+ endproperty
+
+ A_Case_6: assert property (Case_6(cpu_addr)) begin if (attk == 0 && en_SVA == 1) begin attk = 1; caseNum = 5'b00110; end end// V_1 , A_1 , V_x
+
+
+property Case_7 (cpu_address);
+    var type(cpu_address) unknown_address_Vx, known_address_A1;
+    var type(process_type) victim_process_id, attacker_process_id;
+
+    @(posedge clk)
+      disable iff (rst)  // All steps on the same cache line  
+                         ((Miss_or_Hit ##0 (cpu_addr inside {[V1_VR_LOWER_BOUND : V1_VR_UPPER_BOUND]}), unknown_address_Vx = cpu_addr) ##[5:7]
+                          (Miss        ##0 (cpu_addr inside {[A1_AR_LOWER_BOUND : A1_AR_UPPER_BOUND]}), known_address_A1 = cpu_addr) ##0 (unknown_address_Vx[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS] == known_address_A1[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS]) ##7
+                           Miss        ##0 (cpu_addr inside {[V1_VR_LOWER_BOUND : V1_VR_UPPER_BOUND]}) && (known_address_A1[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS] == cpu_addr[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS]))
+                         // or
+                         // step2 and step3 on the same cache line, but step1 on a different cache line
+                         //((Miss_or_Hit ##0 (cpu_addr inside {[V1_VR_LOWER_BOUND : V1_VR_UPPER_BOUND]}), unknown_address_Vx = cpu_addr) ##[5:7]
+                         // (Miss        ##0 (cpu_addr inside {[A1_AR_LOWER_BOUND : A1_AR_UPPER_BOUND]}), known_address_A1 = cpu_addr) ##0 (unknown_address_Vx[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS] != known_address_A1[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS]) ##7
+                         //  Miss        ##0 (cpu_addr inside {[V1_VR_LOWER_BOUND : V1_VR_UPPER_BOUND]}) && (known_address_A1[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS] == cpu_addr[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS]))                           
+                           |-> cache_Miss;    
+ endproperty
+
+ A_Case_7: assert property (Case_7(cpu_addr)) begin if (attk == 0 && en_SVA == 1) begin attk = 1; caseNum = 5'b00111; end end // V_x , A_1 , V_x
+ 
+property Case_8 (cpu_address);
+    var type(cpu_address) known_address_AR, known_address_V1;
+    var type(process_type) attacker_process_id, victim_process_id;
+
+    @(posedge clk)
+      disable iff (rst)   // All steps on the same cache line   
+                         ((Miss_or_Hit ##0 (cpu_addr inside {[A1_AR_LOWER_BOUND : A1_AR_UPPER_BOUND]}), known_address_AR = cpu_addr) ##[5:7]
+                          (Miss_or_Hit        ##0 (cpu_addr inside {[V1_VR_LOWER_BOUND : V1_VR_UPPER_BOUND]}), known_address_V1 = cpu_addr) ##0 (known_address_AR[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS] == known_address_V1[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS]) ##7
+                           Miss         ##0 (cpu_addr inside {[V1_VR_LOWER_BOUND : V1_VR_UPPER_BOUND]}) && (known_address_V1[CPU_ADDR_BITS-1 : LOWER_ADDR_BITS] == cpu_addr[CPU_ADDR_BITS-1 : LOWER_ADDR_BITS]))
+                          // or
+                         //((Miss_or_Hit ##0 (cpu_addr inside {[A1_AR_LOWER_BOUND : A1_AR_UPPER_BOUND]}), known_address_AR = cpu_addr) ##[5:7]
+                          //(Miss_or_Hit ##0 (cpu_addr inside {[V1_VR_LOWER_BOUND : V1_VR_UPPER_BOUND]}), known_address_V1 = cpu_addr) ##0 (known_address_AR[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS] != known_address_V1[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS]) ##[5:7]
+                          // Miss        ##0 (cpu_addr inside {[V1_VR_LOWER_BOUND : V1_VR_UPPER_BOUND]}) && (known_address_AR[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS] == cpu_addr[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS]))                           
+                         //  or
+                        // ((Miss_or_Hit ##0 (cpu_addr inside {[A1_AR_LOWER_BOUND : A1_AR_UPPER_BOUND]}), known_address_AR = cpu_addr) ##[5:7]
+                        //  (Miss_or_Hit ##0 (cpu_addr inside {[V1_VR_LOWER_BOUND : V1_VR_UPPER_BOUND]}), known_address_V1 = cpu_addr) ##0 (known_address_AR[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS] != known_address_V1[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS]) ##[5:7]
+                         //  Hit         ##0 (cpu_addr inside {[V1_VR_LOWER_BOUND : V1_VR_UPPER_BOUND]}) && (known_address_V1[CPU_ADDR_BITS-1 : LOWER_ADDR_BITS] == cpu_addr[CPU_ADDR_BITS-1 : LOWER_ADDR_BITS]))                           
+                          |-> (cache_Hit or cache_Miss);    
+ endproperty
+
+ A_Case_8: assert property (Case_8(cpu_addr)) begin if (attk == 0 && en_SVA == 1) begin attk = 1; caseNum = 5'b01000; end end// A_R , V_1 , V_x
+
+
+// (Double-check!!) -> Property is firing under so many scenarios!
+property Case_9 (cpu_address, proc_type); // Attacker is not directly involved in this type of attack! 
+    var type(cpu_address)  known_address_VR, known_address_V1;
+    var type(proc_type) victim_process_id1, victim_process_id2;
+
+    @(posedge clk)
+      disable iff (rst)   // All steps on the same cache line    
+                         ((Miss_or_Hit ##0 (cpu_addr inside {[V1_VR_LOWER_BOUND : V1_VR_UPPER_BOUND]}), known_address_VR = cpu_addr) ##[5:7] // Flush (A_R)
+                          (Miss_or_Hit         ##0 (cpu_addr inside {[V1_VR_LOWER_BOUND : V1_VR_UPPER_BOUND]}), known_address_V1 = cpu_addr) ##0 (known_address_V1[CPU_ADDR_BITS-1 : LOWER_ADDR_BITS] == known_address_VR[CPU_ADDR_BITS-1 : LOWER_ADDR_BITS]) ##5
+                           Miss         ##0 (cpu_addr inside {[V1_VR_LOWER_BOUND : V1_VR_UPPER_BOUND]}) && (known_address_V1[CPU_ADDR_BITS-1 : LOWER_ADDR_BITS] == cpu_addr[CPU_ADDR_BITS-1 : LOWER_ADDR_BITS])) 
+                        //   or
+                        // ((Miss_or_Hit ##0 (cpu_addr inside {[V1_VR_LOWER_BOUND : V1_VR_UPPER_BOUND]}), known_address_VR = cpu_addr) ##[5:7] // Flush (A_R)
+                        //  (Miss_or_Hit ##0 (cpu_addr inside {[V1_VR_LOWER_BOUND : V1_VR_UPPER_BOUND]}), known_address_V1 = cpu_addr) ##0 (known_address_V1[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS] != known_address_VR[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS]) ##[5:7]
+                         //  Hit         ##0 (cpu_addr inside {[V1_VR_LOWER_BOUND : V1_VR_UPPER_BOUND]}) && (known_address_V1[CPU_ADDR_BITS-1 : LOWER_ADDR_BITS] == cpu_addr[CPU_ADDR_BITS-1 : LOWER_ADDR_BITS]))                          
+                         |-> cache_Miss; 
+ endproperty
+
+ A_Case_9: assert property (Case_9(cpu_addr, process_type)) begin if (attk == 0 && en_SVA == 1) begin attk = 1; caseNum = 5'b01001; end end// V_R , V_1 , V_x
+
+property Case_10 (cpu_address, proc_type); 
+    var type(cpu_address)  known_address_A1, known_address_V1;
+    var type(proc_type) attacker_process_id, victim_process_id;
+
+    @(posedge clk)
+      disable iff (rst)  // step1, step2, step3 are on the same cache line  
+                         ((Miss_or_Hit ##0 (cpu_addr inside {[A1_AR_LOWER_BOUND : A1_AR_UPPER_BOUND]}), known_address_A1 = cpu_addr) ##[5:7] 
+                          (Miss_or_Hit        ##0 (cpu_addr inside {[V1_VR_LOWER_BOUND : V1_VR_UPPER_BOUND]}), known_address_V1 = cpu_addr) ##0 (known_address_V1[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS] == known_address_A1[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS]) ##7
+                           Miss         ##0 (cpu_addr inside {[V1_VR_LOWER_BOUND : V1_VR_UPPER_BOUND]}) && (known_address_V1[CPU_ADDR_BITS-1 : LOWER_ADDR_BITS] == cpu_addr[CPU_ADDR_BITS-1 : LOWER_ADDR_BITS])) 
+                        // or 
+                         // step1 and step3 on the same cache line, but step2 on a different cache line
+                        // ((Miss_or_Hit ##0 (cpu_addr inside {[A1_AR_LOWER_BOUND : A1_AR_UPPER_BOUND]}), known_address_A1 = cpu_addr) ##[5:7] 
+                        //  (Miss_or_Hit ##0 (cpu_addr inside {[V1_VR_LOWER_BOUND : V1_VR_UPPER_BOUND]}), known_address_V1 = cpu_addr) ##0 (known_address_V1[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS] != known_address_A1[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS]) ##[5:7] 
+                        //   Miss        ##0 (cpu_addr inside {[V1_VR_LOWER_BOUND : V1_VR_UPPER_BOUND]}) && (known_address_A1[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS] == cpu_addr[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS])) 
+                        //   or
+                        // // step2 and step3 on the same cache line, but step1 on a different cache line
+                        // ((Miss_or_Hit ##0 (cpu_addr inside {[A1_AR_LOWER_BOUND : A1_AR_UPPER_BOUND]}), known_address_A1 = cpu_addr) ##[5:7] 
+                         // (Miss_or_Hit ##0 (cpu_addr inside {[V1_VR_LOWER_BOUND : V1_VR_UPPER_BOUND]}), known_address_V1 = cpu_addr) ##0 (known_address_V1[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS] != known_address_A1[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS]) ##[5:7] 
+                        //   Hit         ##0 (cpu_addr inside {[V1_VR_LOWER_BOUND : V1_VR_UPPER_BOUND]}) && (known_address_V1[CPU_ADDR_BITS-1 : LOWER_ADDR_BITS] == cpu_addr[CPU_ADDR_BITS-1 : LOWER_ADDR_BITS]))                            
+                         |-> (cache_Miss); 
+ endproperty
+
+ A_Case_10: assert property (Case_10(cpu_addr, process_type)) begin if (attk == 0 && en_SVA == 1) begin attk = 1; caseNum = 5'b01010; end end// A_1 , V_1 , V_x
+
+
+property Case_11 (cpu_address, proc_type); 
+    var type(cpu_address) known_address_V1_1, known_address_V1_2;
+    var type(proc_type) victim_process_id;
+
+    @(posedge clk)
+      disable iff (rst)   // step1, step2, step3 are on the same cache line 
+                          (Miss_or_Hit ##0 (cpu_addr inside {[V1_VR_LOWER_BOUND : V1_VR_UPPER_BOUND]}), known_address_V1_1 = cpu_addr) ##[5:7]
+                          (Hit         ##0 (cpu_addr inside {[V1_VR_LOWER_BOUND : V1_VR_UPPER_BOUND]}), known_address_V1_2 = cpu_addr) ##0 (known_address_V1_1[CPU_ADDR_BITS-1 : LOWER_ADDR_BITS] == known_address_V1_2[CPU_ADDR_BITS-1 : LOWER_ADDR_BITS]) ##5 
+                           Miss         ##0 (cpu_addr inside {[V1_VR_LOWER_BOUND : V1_VR_UPPER_BOUND]}) && (known_address_V1_2[CPU_ADDR_BITS-1 : LOWER_ADDR_BITS] == cpu_addr[CPU_ADDR_BITS-1 : LOWER_ADDR_BITS]) 
+                          |-> cache_Miss;    
+ endproperty
+
+ A_Case_11: assert property (Case_11(cpu_addr, process_type)) begin if (attk == 0 && en_SVA == 1) begin attk = 1; caseNum = 5'b01011; end end// V_1 , V_1 , V_x
+
+
+property Case_12 (cpu_address, proc_type); 
+    var type(cpu_address) unknown_address_Vx, known_address_V1;
+    var type(proc_type) victim_process_id;
+
+    @(posedge clk)
+      disable iff (rst)  // step1, step2, step3 are on the same cache line  
+                         ((Miss_or_Hit ##0 (cpu_addr inside {[V1_VR_LOWER_BOUND : V1_VR_UPPER_BOUND]}), unknown_address_Vx = cpu_addr) ##[5:7]
+                          (Hit         ##0 (cpu_addr inside {[V1_VR_LOWER_BOUND : V1_VR_UPPER_BOUND]}), known_address_V1 = cpu_addr) ##0 (known_address_V1[CPU_ADDR_BITS-1 : LOWER_ADDR_BITS] == unknown_address_Vx[CPU_ADDR_BITS-1 : LOWER_ADDR_BITS]) ##5
+                           Hit         ##0 (cpu_addr inside {[V1_VR_LOWER_BOUND : V1_VR_UPPER_BOUND]}) && (known_address_V1[CPU_ADDR_BITS-1 : LOWER_ADDR_BITS] == cpu_addr[CPU_ADDR_BITS-1 : LOWER_ADDR_BITS]))
+                          or
+                         // step2 and step3 on the same cache line, but step1 on a different cache line 
+                         ((Miss_or_Hit ##0 (cpu_addr inside {[V1_VR_LOWER_BOUND : V1_VR_UPPER_BOUND]}), unknown_address_Vx = cpu_addr) ##[5:7]
+                          (Miss_or_Hit ##0 (cpu_addr inside {[V1_VR_LOWER_BOUND : V1_VR_UPPER_BOUND]}), known_address_V1 = cpu_addr) ##0 (known_address_V1[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS] != unknown_address_Vx[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS]) ##[5:7]
+                           Hit         ##0 (cpu_addr inside {[V1_VR_LOWER_BOUND : V1_VR_UPPER_BOUND]}) && (known_address_V1[CPU_ADDR_BITS-1 : LOWER_ADDR_BITS] == cpu_addr[CPU_ADDR_BITS-1 : LOWER_ADDR_BITS])) 
+                         |-> cache_Hit;    
+ endproperty
+
+ A_Case_12: assert property (Case_12(cpu_addr, process_type)) begin if (attk == 0 && en_SVA == 1) begin attk = 1 ; caseNum = 5'b01100; end end// V_x , V_1 , V_x
+
+
+// Flush + Flush
+// A flushed cache line, should be flushed faster the next time flush occurs! (similar to eviction and later a Hit occurring)
+property Case_13 (cpu_address, proc_type);
+    var type(cpu_address) known_address_AR, unknown_address_Vx;
+    var type(proc_type) process_id;
+
+    @(posedge clk)
+      disable iff (rst)    (Miss_or_Hit ##0 (cpu_addr inside {[A1_AR_LOWER_BOUND : A1_AR_UPPER_BOUND]}), known_address_AR = cpu_addr) ##[5:7] 
+                           (Miss        ##0 (cpu_addr inside {[V1_VR_LOWER_BOUND : V1_VR_UPPER_BOUND]}), unknown_address_Vx = cpu_addr) ##0 (known_address_AR[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS] == unknown_address_Vx[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS]) ##7 
+                            Miss        ##0 (cpu_addr inside {[A1_AR_LOWER_BOUND : A1_AR_UPPER_BOUND]}) && (unknown_address_Vx[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS] == cpu_addr[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS]) 
+                            |-> cache_Miss;    
+ endproperty
+
+ A_Case_13: assert property (Case_13(cpu_addr, process_type)) begin if (attk == 0 && en_SVA == 1) begin attk = 1; caseNum = 5'b01101; end end// A_R , V_x , A_R
+
+
+property Case_14 (cpu_address, proc_type); 
+    var type(cpu_address) known_address_VR, unknown_address_Vx;
+    var type(proc_type) process_id;
+
+    @(posedge clk)
+      disable iff (rst)   // step1, step2, step3 are on the same cache line
+                          ((Miss_or_Hit ##0 (cpu_addr inside {[V1_VR_LOWER_BOUND : V1_VR_UPPER_BOUND]}), known_address_VR = cpu_addr) ##[5:7]
+                           (Hit         ##0 (cpu_addr inside {[V1_VR_LOWER_BOUND : V1_VR_UPPER_BOUND]}), unknown_address_Vx = cpu_addr) ##0 (known_address_VR[CPU_ADDR_BITS-1 : LOWER_ADDR_BITS] == unknown_address_Vx[CPU_ADDR_BITS-1 : LOWER_ADDR_BITS]) ##5
+                            Miss        ##0 (cpu_addr inside {[A1_AR_LOWER_BOUND : A1_AR_UPPER_BOUND]}) && (unknown_address_Vx[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS] == cpu_addr[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS]))
+                            or 
+                          // step1 and step3 on the same cache line, but step2 on a different cache line
+                          ((Miss_or_Hit ##0 (cpu_addr inside {[V1_VR_LOWER_BOUND : V1_VR_UPPER_BOUND]}), known_address_VR = cpu_addr) ##[5:7]
+                           (Miss_or_Hit ##0 (cpu_addr inside {[V1_VR_LOWER_BOUND : V1_VR_UPPER_BOUND]}), unknown_address_Vx = cpu_addr) ##0 (known_address_VR[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS] != unknown_address_Vx[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS]) ##[5:7]
+                            Miss        ##0 (cpu_addr inside {[A1_AR_LOWER_BOUND : A1_AR_UPPER_BOUND]}) && (known_address_VR[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS] == cpu_addr[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS])) 
+                            or
+                          // step2 and step3 on the same cache line, but step1 on a different cache line
+                          ((Miss_or_Hit ##0 (cpu_addr inside {[V1_VR_LOWER_BOUND : V1_VR_UPPER_BOUND]}), known_address_VR = cpu_addr) ##[5:7]
+                           (Miss_or_Hit ##0 (cpu_addr inside {[V1_VR_LOWER_BOUND : V1_VR_UPPER_BOUND]}), unknown_address_Vx = cpu_addr) ##0 (known_address_VR[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS] != unknown_address_Vx[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS]) ##[5:7]
+                            Miss        ##0 (cpu_addr inside {[A1_AR_LOWER_BOUND : A1_AR_UPPER_BOUND]}) && (unknown_address_Vx[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS] == cpu_addr[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS]))                             
+                          |-> cache_Miss;    
+ endproperty
+
+ A_Case_14: assert property (Case_14(cpu_addr, process_type)) begin if (attk == 0 && en_SVA == 1) begin attk = 1; caseNum = 5'b01110; end end// V_R , V_x , A_R
+
+
+property Case_15 (cpu_address, proc_type); 
+    var type(cpu_address) unknown_address_Vx_1, unknown_address_Vx_2, known_address_AR;
+    var type(proc_type) process_id;
+
+    @(posedge clk)
+      disable iff (rst)   
+                          // step1, step2, step3 are on the same cache line
+                          ((Miss_or_Hit ##0 (cpu_addr inside {[V1_VR_LOWER_BOUND : V1_VR_UPPER_BOUND]}), unknown_address_Vx_1 = cpu_addr) ##[5:7]
+                           (Hit         ##0 (cpu_addr inside {[V1_VR_LOWER_BOUND : V1_VR_UPPER_BOUND]}), unknown_address_Vx_2 = cpu_addr) ##0 (unknown_address_Vx_1[CPU_ADDR_BITS-1 : LOWER_ADDR_BITS] == unknown_address_Vx_2[CPU_ADDR_BITS-1 : LOWER_ADDR_BITS]) ##5
+                            Miss        ##0 (cpu_addr inside {[A1_AR_LOWER_BOUND : A1_AR_UPPER_BOUND]}) && (unknown_address_Vx_2[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS] == cpu_addr[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS]))                             
+                          |-> cache_Miss;    
+ endproperty
+
+ A_Case_15: assert property (Case_15(cpu_addr, process_type)) begin if (attk == 0 && en_SVA == 1) begin attk = 1; caseNum = 5'b01111; end end// V_x , V_x , A_R
+
+
+property Case_16 (cpu_address, proc_type); 
+    var type(cpu_address) known_address_AR, unknown_address_Vx;
+    var type(proc_type) attacker_process_id, victim_process_id;
+
+    @(posedge clk)
+      disable iff (rst)    // step1 and step3 on the same cache line, but step2 on a different cachce line
+                           (Miss_or_Hit ##0 (cpu_addr inside {[A1_AR_LOWER_BOUND : A1_AR_UPPER_BOUND]}), known_address_AR = cpu_addr) ##[5:7] 
+                           (Miss_or_Hit ##0 (cpu_addr inside {[V1_VR_LOWER_BOUND : V1_VR_UPPER_BOUND]}), unknown_address_Vx = cpu_addr) ##0 (unknown_address_Vx[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS] != known_address_AR[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS]) ##[5:7] 
+                            Miss        ##0 (cpu_addr inside {[V1_VR_LOWER_BOUND : V1_VR_UPPER_BOUND]}) && (known_address_AR[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS] == cpu_addr[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS]) 
+                            |-> cache_Miss;    
+ endproperty
+
+ A_Case_16: assert property (Case_16(cpu_addr, process_type)) begin if (attk == 0 && en_SVA == 1) begin attk = 1; caseNum = 5'b10000; end end// A_R , V_x , V_R
+
+
+// property Case_17 (cpu_address, proc_type); 
+//     var type(cpu_address) known_address, unknown_address;
+//     var type(proc_type) victim_process_id;
+
+//     @(posedge clk)
+//       disable iff (rst)   ((Miss ##0 (cpu_addr inside {[V1_VR_LOWER_BOUND : V1_VR_UPPER_BOUND]}), known_address = cpu_addr) ##7 
+//                            (Miss ##0 (cpu_addr inside {[V1_VR_LOWER_BOUND : V1_VR_UPPER_BOUND]}), unknown_address = cpu_addr) ##0 (known_address[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS] == unknown_address[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS]) ##7 
+//                             Hit  ##0 (cpu_addr inside {[A1_AR_LOWER_BOUND : A1_AR_UPPER_BOUND]}) && (unknown_address[CPU_ADDR_BITS-1 : LOWER_ADDR_BITS] == cpu_addr[CPU_ADDR_BITS-1 : LOWER_ADDR_BITS]))
+//                           or 
+//                           ((Miss ##0 (cpu_addr inside {[V1_VR_LOWER_BOUND : V1_VR_UPPER_BOUND]}), known_address = cpu_addr) ##7 
+//                            (Hit  ##0 (cpu_addr inside {[V1_VR_LOWER_BOUND : V1_VR_UPPER_BOUND]}), unknown_address = cpu_addr) ##0 (known_address[CPU_ADDR_BITS-1 : LOWER_ADDR_BITS] == unknown_address[CPU_ADDR_BITS-1 : LOWER_ADDR_BITS]) ##5 
+//                             Hit  ##0 (cpu_addr inside {[A1_AR_LOWER_BOUND : A1_AR_UPPER_BOUND]}) && (unknown_address[CPU_ADDR_BITS-1 : LOWER_ADDR_BITS] == cpu_addr[CPU_ADDR_BITS-1 : LOWER_ADDR_BITS])) |-> cache_Hit;    
+//  endproperty
+
+//  A_Case_17: assert property (Case_17(cpu_addr, process_type)); // V_R , V_x , V_R
+
+
+
+// property Case_18 (cpu_address, proc_type); 
+//     var type(cpu_address) unknown_address1, unknown_address2;
+//     var type(proc_type) victim_process_id;
+
+//     @(posedge clk)
+//       disable iff (rst)   ((Miss ##0 (cpu_addr inside {[V1_VR_LOWER_BOUND : V1_VR_UPPER_BOUND]}), unknown_address1 = cpu_addr) ##7 
+//                            (Miss ##0 (cpu_addr inside {[V1_VR_LOWER_BOUND : V1_VR_UPPER_BOUND]}), unknown_address2 = cpu_addr) ##0 (unknown_address2[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS] == unknown_address1[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS]) ##7
+//                             Hit  ##0 (cpu_addr inside {[V1_VR_LOWER_BOUND : V1_VR_UPPER_BOUND]}) && (unknown_address2[CPU_ADDR_BITS-1 : LOWER_ADDR_BITS] == cpu_addr[CPU_ADDR_BITS-1 : LOWER_ADDR_BITS]))
+//                           or
+//                           ((Miss ##0 (cpu_addr inside {[V1_VR_LOWER_BOUND : V1_VR_UPPER_BOUND]}), unknown_address1 = cpu_addr) ##7 
+//                            (Hit  ##0 (cpu_addr inside {[V1_VR_LOWER_BOUND : V1_VR_UPPER_BOUND]}), unknown_address2 = cpu_addr) ##0 (unknown_address2[CPU_ADDR_BITS-1 : LOWER_ADDR_BITS] == unknown_address1[CPU_ADDR_BITS-1 : LOWER_ADDR_BITS]) ##5
+//                             Hit  ##0 (cpu_addr inside {[V1_VR_LOWER_BOUND : V1_VR_UPPER_BOUND]}) && (unknown_address2[CPU_ADDR_BITS-1 : LOWER_ADDR_BITS] == cpu_addr[CPU_ADDR_BITS-1 : LOWER_ADDR_BITS])) |-> cache_Hit;    
+//  endproperty
+
+//  A_Case_18: assert property (Case_18(cpu_addr, process_type)); // V_x , V_x , V_R
+
+
+
+property Case_19 (cpu_address, proc_type);
+    var type(cpu_address) known_address_AR, unknown_address_Vx;
+    var type(proc_type) attacker_process_id;
+
+    @(posedge clk)
+      disable iff (rst)    // step1, step2, step3 are on the same cache line
+                          ((Miss_or_Hit ##0 (cpu_addr inside {[A1_AR_LOWER_BOUND : A1_AR_UPPER_BOUND]}), known_address_AR = cpu_addr) ##[5:7]
+                           (Miss        ##0 (cpu_addr inside {[V1_VR_LOWER_BOUND : V1_VR_UPPER_BOUND]}), unknown_address_Vx = cpu_addr) ##0 (unknown_address_Vx[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS] == known_address_AR[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS]) ##7 
+                            Miss        ##0 (cpu_addr inside {[A1_AR_LOWER_BOUND : A1_AR_UPPER_BOUND]}) && (unknown_address_Vx[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS] == cpu_addr[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS]))
+                           //or
+                           // step2 and step3 on the same cache line, but step1 on a different cache line
+                          //((Miss_or_Hit ##0 (cpu_addr inside {[A1_AR_LOWER_BOUND : A1_AR_UPPER_BOUND]}), known_address_AR = cpu_addr) ##[5:7]
+                           //(Miss_or_Hit ##0 (cpu_addr inside {[V1_VR_LOWER_BOUND : V1_VR_UPPER_BOUND]}), unknown_address_Vx = cpu_addr) ##0 (unknown_address_Vx[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS] != known_address_AR[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS]) ##[5:7]
+                           // Miss        ##0 (cpu_addr inside {[A1_AR_LOWER_BOUND : A1_AR_UPPER_BOUND]}) && (unknown_address_Vx[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS] == cpu_addr[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS]))
+                           |-> cache_Miss;    
+ endproperty
+
+ A_Case_19: assert property (Case_19(cpu_addr, process_type)) begin if (attk == 0 && en_SVA == 1) begin attk = 1; caseNum = 5'b10011; end end// A_R , V_x , A_1
+
+
+property Case_20 (cpu_address, proc_type);
+    var type(cpu_address) known_address_VR, unknown_address_Vx;
+    var type(proc_type) victim_process_id;
+
+    @(posedge clk)
+      disable iff (rst)   // step1, step2, step3 are on the same cache line 
+                          ((Miss_or_Hit ##0 (cpu_addr inside {[V1_VR_LOWER_BOUND : V1_VR_UPPER_BOUND]}), known_address_VR = cpu_addr) ##[5:7] 
+                           (Hit         ##0 (cpu_addr inside {[V1_VR_LOWER_BOUND : V1_VR_UPPER_BOUND]}), unknown_address_Vx = cpu_addr) ##0 (unknown_address_Vx[CPU_ADDR_BITS-1 : LOWER_ADDR_BITS] == known_address_VR[CPU_ADDR_BITS-1 : LOWER_ADDR_BITS]) ##5 
+                            Miss        ##0 (cpu_addr inside {[A1_AR_LOWER_BOUND : A1_AR_UPPER_BOUND]}) && (unknown_address_Vx[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS] == cpu_addr[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS]))
+                            or
+                          // step1 and step3 on the same cache line, but step2 on a different cache line
+                          ((Miss_or_Hit ##0 (cpu_addr inside {[V1_VR_LOWER_BOUND : V1_VR_UPPER_BOUND]}), known_address_VR = cpu_addr) ##[5:7] 
+                           (Miss_or_Hit ##0 (cpu_addr inside {[V1_VR_LOWER_BOUND : V1_VR_UPPER_BOUND]}), unknown_address_Vx = cpu_addr) ##0 (unknown_address_Vx[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS] != known_address_VR[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS]) ##[5:7]
+                            Miss        ##0 (cpu_addr inside {[A1_AR_LOWER_BOUND : A1_AR_UPPER_BOUND]}) && (known_address_VR[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS] == cpu_addr[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS]))   
+                            or
+                          // step2 and step3 on the same cache line, but step1 on a different cache line
+                          ((Miss_or_Hit ##0 (cpu_addr inside {[V1_VR_LOWER_BOUND : V1_VR_UPPER_BOUND]}), known_address_VR = cpu_addr) ##[5:7] 
+                           (Miss_or_Hit ##0 (cpu_addr inside {[V1_VR_LOWER_BOUND : V1_VR_UPPER_BOUND]}), unknown_address_Vx = cpu_addr) ##0 (unknown_address_Vx[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS] != known_address_VR[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS]) ##[5:7]
+                            Miss        ##0 (cpu_addr inside {[A1_AR_LOWER_BOUND : A1_AR_UPPER_BOUND]}) && (unknown_address_Vx[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS] == cpu_addr[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS]))   
+                            |-> cache_Miss;    
+ endproperty
+
+ A_Case_20: assert property (Case_20(cpu_addr, process_type)) begin if (attk == 0 && en_SVA == 1) begin attk = 1; caseNum = 5'b10100; end end// V_R , V_x , A_1
+
+
+
+// Case_21 maps to Prime+Probe attack (one of its types)! -> Miss-based attack!
+// In this attack, the address of step1 and step3 are the same (according to the definition of the attack)!
+property Case_21 (cpu_address, proc_type);
+    var type(cpu_address) known_address_A1, unknown_address_Vx;
+    var type(proc_type) attacker_process_id;
+
+    @(posedge clk)
+      disable iff (rst)    // step1, step2 and step3 are on the same cache line
+                           (Miss_or_Hit ##0 (cpu_addr inside {[A1_AR_LOWER_BOUND : A1_AR_UPPER_BOUND]}), known_address_A1 = cpu_addr) ##[5:7] 
+                           (Miss        ##0 (cpu_addr inside {[V1_VR_LOWER_BOUND : V1_VR_UPPER_BOUND]}), unknown_address_Vx = cpu_addr) ##0 (known_address_A1[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS] == unknown_address_Vx[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS]) ##7 
+                            Miss        ##0 (cpu_addr inside {[A1_AR_LOWER_BOUND : A1_AR_UPPER_BOUND]}) && (known_address_A1 == cpu_addr) 
+                           |-> cache_Miss;    
+ endproperty
+
+A_Case_21: assert property (Case_21(cpu_addr, process_type)) begin if (attk == 0 && en_SVA == 1) begin attk = 1; caseNum = 5'b10101; end end// A_1 , V_x , A_1
+
+
+property Case_22 (cpu_address, proc_type);
+    var type(cpu_address)  known_address_V1, unknown_address_Vx, known_address_A1;
+    var type(proc_type) victim_process_id;
+
+    @(posedge clk)
+      disable iff (rst)   // step1, step2, step3 are on the same cache line
+                          ((Miss_or_Hit ##0 (cpu_addr inside {[V1_VR_LOWER_BOUND :  V1_VR_UPPER_BOUND]}), known_address_V1 = cpu_addr) ##[5:7] 
+                           (Hit         ##0 (cpu_addr inside {[V1_VR_LOWER_BOUND :  V1_VR_UPPER_BOUND]}), unknown_address_Vx = cpu_addr) ##0 (known_address_V1[CPU_ADDR_BITS-1 : LOWER_ADDR_BITS] == unknown_address_Vx[CPU_ADDR_BITS-1 : LOWER_ADDR_BITS]) ##5
+                            Miss        ##0 (cpu_addr inside {[A1_AR_LOWER_BOUND :  A1_AR_UPPER_BOUND]}) && (unknown_address_Vx[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS] == cpu_addr[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS]))
+                            or
+                          // step1 and step3 map on the same cache line, but step2 on a different cache line
+                          ((Miss_or_Hit ##0 (cpu_addr inside {[V1_VR_LOWER_BOUND :  V1_VR_UPPER_BOUND]}), known_address_V1 = cpu_addr) ##[5:7] 
+                           (Miss_or_Hit ##0 (cpu_addr inside {[V1_VR_LOWER_BOUND :  V1_VR_UPPER_BOUND]}), unknown_address_Vx = cpu_addr) ##0 (known_address_V1[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS] != unknown_address_Vx[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS]) ##[5:7] 
+                            Miss        ##0 (cpu_addr inside {[A1_AR_LOWER_BOUND :  A1_AR_UPPER_BOUND]}) && (known_address_V1[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS] == cpu_addr[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS])) 
+                            or
+                          // step2 and step3 on the same cache line, but step1 on a different cache line
+                          ((Miss_or_Hit ##0 (cpu_addr inside {[V1_VR_LOWER_BOUND :  V1_VR_UPPER_BOUND]}), known_address_V1 = cpu_addr) ##[5:7] 
+                           (Miss_or_Hit ##0 (cpu_addr inside {[V1_VR_LOWER_BOUND :  V1_VR_UPPER_BOUND]}), unknown_address_Vx = cpu_addr) ##0 (known_address_V1[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS] != unknown_address_Vx[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS]) ##[5:7] 
+                            Miss        ##0 (cpu_addr inside {[A1_AR_LOWER_BOUND :  A1_AR_UPPER_BOUND]}) && (unknown_address_Vx[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS] == cpu_addr[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS])) 
+
+                          |-> cache_Miss;    
+ endproperty
+
+ A_Case_22: assert property (Case_22(cpu_addr, process_type)) begin if (attk == 0 && en_SVA == 1) begin attk = 1; caseNum = 5'b10110; end end// V_1 , V_x , A_1
+
+
+// Evict+Reload
+// Shouldn't the property consider the cache Hit in the last step ?!
+property Case_23 (cpu_address, proc_type);
+    var type(cpu_address)  unknown_address_Vx_1, unknown_address_Vx_2;
+    var type(proc_type) victim_process_id;
+
+    @(posedge clk)
+      disable iff (rst)   // step1, step2, step3 are on the same cache line
+                          ((Miss_or_Hit ##0 (cpu_addr inside {[V1_VR_LOWER_BOUND : V1_VR_UPPER_BOUND]}), unknown_address_Vx_1 = cpu_addr) ##[5:7] 
+                           (Hit         ##0 (cpu_addr inside {[V1_VR_LOWER_BOUND : V1_VR_UPPER_BOUND]}), unknown_address_Vx_2 = cpu_addr) ##0 (unknown_address_Vx_2[CPU_ADDR_BITS-1 : LOWER_ADDR_BITS] == unknown_address_Vx_1[CPU_ADDR_BITS-1 : LOWER_ADDR_BITS]) ##5
+                            Miss        ##0 (cpu_addr inside {[A1_AR_LOWER_BOUND : A1_AR_UPPER_BOUND]}) && (unknown_address_Vx_2[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS] == cpu_addr[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS]))
+                           |-> cache_Miss;    
+ endproperty
+
+ A_Case_23: assert property (Case_23(cpu_addr, process_type)) begin if (attk == 0 && en_SVA == 1) begin attk = 1; caseNum = 5'b10111; end end// V_x , V_x , A_1
+
+
+property Case_24 (cpu_address, proc_type); 
+    var type(cpu_address)  known_address_AR, unknown_address_Vx;
+    var type(proc_type) attacker_process_id, victim_process_id;
+
+    @(posedge clk)
+      disable iff (rst)   // step1, step2, step3 are on the same cache line
+                          ((Miss_or_Hit ##0 (cpu_addr inside {[A1_AR_LOWER_BOUND : A1_AR_UPPER_BOUND]}), known_address_AR = cpu_addr) ##[5:7] 
+                           (Miss        ##0 (cpu_addr inside {[V1_VR_LOWER_BOUND : V1_VR_UPPER_BOUND]}), unknown_address_Vx = cpu_addr) ##0 (unknown_address_Vx[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS] == known_address_AR[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS]) ##7 
+                            Hit         ##0 (cpu_addr inside {[V1_VR_LOWER_BOUND : V1_VR_UPPER_BOUND]}) && (unknown_address_Vx[CPU_ADDR_BITS-1 : LOWER_ADDR_BITS] == cpu_addr[CPU_ADDR_BITS-1 : LOWER_ADDR_BITS])) 
+                            or
+                          // step2 and step3 on the same cache line, but step1 on a different cache line
+                          ((Miss_or_Hit ##0 (cpu_addr inside {[A1_AR_LOWER_BOUND : A1_AR_UPPER_BOUND]}), known_address_AR = cpu_addr) ##[5:7] 
+                           (Miss_or_Hit ##0 (cpu_addr inside {[V1_VR_LOWER_BOUND : V1_VR_UPPER_BOUND]}), unknown_address_Vx = cpu_addr) ##0 (unknown_address_Vx[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS] != known_address_AR[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS]) ##[5:7] 
+                            Hit         ##0 (cpu_addr inside {[V1_VR_LOWER_BOUND : V1_VR_UPPER_BOUND]}) && (unknown_address_Vx[CPU_ADDR_BITS-1 : LOWER_ADDR_BITS] == cpu_addr[CPU_ADDR_BITS-1 : LOWER_ADDR_BITS]))                          
+                            |-> cache_Hit;    
+ endproperty
+
+ A_Case_24: assert property (Case_24(cpu_addr, process_type)) begin if (attk == 0 && en_SVA == 1) begin attk = 1; caseNum = 5'b11000; end end// A_R , V_x , V_1
+
+
+// Similar to Case 27 (V_R here is similar to V1, since we are using software flush!)
+property Case_25 (cpu_address, proc_type); 
+    var type(cpu_address)  known_address_VR, unknown_address_Vx;
+    var type(proc_type) attacker_process_id, victim_process_id;
+
+    @(posedge clk)
+      disable iff (rst)   // step1, step2, step3 are on the same cache line
+                          ((Miss_or_Hit ##0 (cpu_addr inside {[V1_VR_LOWER_BOUND : V1_VR_UPPER_BOUND]}), known_address_VR = cpu_addr) ##[5:7] 
+                           (Hit         ##0 (cpu_addr inside {[V1_VR_LOWER_BOUND : V1_VR_UPPER_BOUND]}), unknown_address_Vx = cpu_addr) ##0 (unknown_address_Vx[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS] == known_address_VR[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS]) ##5
+                            Hit         ##0 (cpu_addr inside {[V1_VR_LOWER_BOUND : V1_VR_UPPER_BOUND]}) && (unknown_address_Vx[CPU_ADDR_BITS-1 : LOWER_ADDR_BITS] == cpu_addr[CPU_ADDR_BITS-1 : LOWER_ADDR_BITS]))
+                            or
+                           //step1 and step3 on the same cache line, but step2 on a different cache line
+                          ((Miss_or_Hit ##0 (cpu_addr inside {[V1_VR_LOWER_BOUND : V1_VR_UPPER_BOUND]}), known_address_VR = cpu_addr) ##[5:7]
+                           (Miss_or_Hit ##0 (cpu_addr inside {[V1_VR_LOWER_BOUND : V1_VR_UPPER_BOUND]}), unknown_address_Vx = cpu_addr) ##0 
+                           (unknown_address_Vx[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS] != known_address_VR[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS]) ##[5:7]
+                            Hit         ##0 (cpu_addr inside {[V1_VR_LOWER_BOUND : V1_VR_UPPER_BOUND]}) && (known_address_VR[CPU_ADDR_BITS-1 : LOWER_ADDR_BITS] == cpu_addr[CPU_ADDR_BITS-1 : LOWER_ADDR_BITS])) 
+                            or
+                          // step2 and step3 on the same cache line, but step1 on a different cache line
+                          ((Miss_or_Hit ##0 (cpu_addr inside {[V1_VR_LOWER_BOUND : V1_VR_UPPER_BOUND]}), known_address_VR = cpu_addr) ##[5:7]
+                           (Miss_or_Hit ##0 (cpu_addr inside {[V1_VR_LOWER_BOUND : V1_VR_UPPER_BOUND]}), unknown_address_Vx = cpu_addr) ##0 (unknown_address_Vx[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS] != known_address_VR[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS]) ##[5:7]
+                            Hit         ##0 (cpu_addr inside {[V1_VR_LOWER_BOUND : V1_VR_UPPER_BOUND]}) && (unknown_address_Vx[CPU_ADDR_BITS-1 : LOWER_ADDR_BITS] == cpu_addr[CPU_ADDR_BITS-1 : LOWER_ADDR_BITS])) 
+                          |-> cache_Hit;    
+ endproperty
+
+ A_Case_25: assert property (Case_25(cpu_addr, process_type)) begin if (attk == 0 && en_SVA == 1) begin attk = 1; caseNum = 5'b11001; end end// V_R , V_x , V_1
+
+
+// Double-check Case 26!!
+property Case_26 (cpu_address, proc_type);
+    var type(cpu_address)  known_address_A1, unknown_address_Vx;
+    var type(proc_type) attacker_process_id, victim_process_id;
+
+    @(posedge clk)
+      disable iff (rst)   // step1, step2, step3 are on the same cache line
+                          ((Miss_or_Hit ##0 (cpu_addr inside {[A1_AR_LOWER_BOUND : A1_AR_UPPER_BOUND]}), known_address_A1 = cpu_addr) ##[5:7]
+                           (Miss        ##0 (cpu_addr inside {[V1_VR_LOWER_BOUND : V1_VR_UPPER_BOUND]}), unknown_address_Vx = cpu_addr) ##0 (unknown_address_Vx[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS] == known_address_A1[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS]) ##7
+                            Hit         ##0 (cpu_addr inside {[V1_VR_LOWER_BOUND : V1_VR_UPPER_BOUND]}) && (unknown_address_Vx[CPU_ADDR_BITS-1 : LOWER_ADDR_BITS] == cpu_addr[CPU_ADDR_BITS-1 : LOWER_ADDR_BITS]))
+                            or
+                          // step2 and step3 on the same cache line, but step1 on a different cache line
+                          ((Miss_or_Hit ##0 (cpu_addr inside {[A1_AR_LOWER_BOUND : A1_AR_UPPER_BOUND]}), known_address_A1 = cpu_addr) ##[5:7]
+                           (Miss_or_Hit ##0 (cpu_addr inside {[V1_VR_LOWER_BOUND : V1_VR_UPPER_BOUND]}), unknown_address_Vx = cpu_addr) ##0 (unknown_address_Vx[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS] != known_address_A1[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS]) ##[5:7]
+                            Hit ##0 (cpu_addr inside {[V1_VR_LOWER_BOUND : V1_VR_UPPER_BOUND]}) && (unknown_address_Vx[CPU_ADDR_BITS-1 : LOWER_ADDR_BITS] == cpu_addr[CPU_ADDR_BITS-1 : LOWER_ADDR_BITS])) 
+                          |-> cache_Hit;    
+ endproperty
+
+ A_Case_26: assert property (Case_26(cpu_addr, process_type)) begin if (attk == 0 && en_SVA == 1) begin attk = 1; caseNum = 5'b11010; end end// A_1 , V_x , V_1
+
+
+property Case_27 (cpu_address, proc_type); 
+    var type(cpu_address)  known_address_V1, unknown_address_Vx;
+    var type(proc_type) victim_process_id;
+
+    @(posedge clk)
+      disable iff (rst)   // step1, step2, step3 are on the same cache line
+                          ((Miss_or_Hit ##0 (cpu_addr inside {[V1_VR_LOWER_BOUND : V1_VR_UPPER_BOUND]}), known_address_V1 = cpu_addr) ##[5:7] 
+                           (Hit         ##0 (cpu_addr inside {[V1_VR_LOWER_BOUND : V1_VR_UPPER_BOUND]}), unknown_address_Vx = cpu_addr) ##0 (unknown_address_Vx[CPU_ADDR_BITS-1 : LOWER_ADDR_BITS] == known_address_V1[CPU_ADDR_BITS-1 : LOWER_ADDR_BITS]) ##5
+                            Hit         ##0 (cpu_addr inside {[V1_VR_LOWER_BOUND : V1_VR_UPPER_BOUND]}) && (unknown_address_Vx[CPU_ADDR_BITS-1 : LOWER_ADDR_BITS] == cpu_addr[CPU_ADDR_BITS-1 : LOWER_ADDR_BITS])) 
+                            or
+                          // step2 and step3 on the same cache line, but step1 on a different cache line
+                          ((Miss_or_Hit ##0 (cpu_addr inside {[V1_VR_LOWER_BOUND : V1_VR_UPPER_BOUND]}), known_address_V1 = cpu_addr) ##[5:7] 
+                           (Miss_or_Hit ##0 (cpu_addr inside {[V1_VR_LOWER_BOUND : V1_VR_UPPER_BOUND]}), unknown_address_Vx = cpu_addr) ##0 (unknown_address_Vx[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS] != known_address_V1[SET_BITS+LOWER_ADDR_BITS-1 : LOWER_ADDR_BITS]) ##[5:7] 
+                            Hit         ##0 (cpu_addr inside {[V1_VR_LOWER_BOUND : V1_VR_UPPER_BOUND]}) && (unknown_address_Vx[CPU_ADDR_BITS-1 : LOWER_ADDR_BITS] == cpu_addr[CPU_ADDR_BITS-1 : LOWER_ADDR_BITS])) 
+                          |-> cache_Hit;    
+ endproperty
+
+ A_Case_27: assert property (Case_27(cpu_addr, process_type)) begin if (attk == 0 && en_SVA == 1) begin attk = 1; caseNum = 5'b11011; end end// V_1 , V_x , V_1
+
+
+property Case_28 (cpu_address, proc_type); 
+    var type(cpu_address)  unknown_address_Vx_1, unknown_address_Vx_2;
+    var type(proc_type) victim_process_id;
+
+    @(posedge clk)
+      disable iff (rst)   // step1, step2, step3 are on the same cache line
+                          ((Miss_or_Hit ##0 (cpu_addr inside {[V1_VR_LOWER_BOUND : V1_VR_UPPER_BOUND]}), unknown_address_Vx_1 = cpu_addr) ##[5:7] 
+                           (Hit         ##0 (cpu_addr inside {[V1_VR_LOWER_BOUND : V1_VR_UPPER_BOUND]}), unknown_address_Vx_2 = cpu_addr) ##0 (unknown_address_Vx_1[CPU_ADDR_BITS-1 : LOWER_ADDR_BITS] == unknown_address_Vx_2[CPU_ADDR_BITS-1 : LOWER_ADDR_BITS]) ##5
+                            Hit         ##0 (cpu_addr inside {[V1_VR_LOWER_BOUND : V1_VR_UPPER_BOUND]}) && (unknown_address_Vx_2[CPU_ADDR_BITS-1 : LOWER_ADDR_BITS] == cpu_addr[CPU_ADDR_BITS-1 : LOWER_ADDR_BITS])) 
+                          |-> cache_Hit;    
+ endproperty
+
+ A_Case_28: assert property (Case_28(cpu_addr, process_type)) begin if (attk == 0 && en_SVA == 1) begin attk = 1; caseNum = 5'b11100; end end// V_x , V_x , V_1
+
+
+ // Checked up to here!!!
+
+
+//   sequence P1_CPU_read_request_to_cache_sequence;
+//     (fsm_cs == READY) && cpu_req && (!cpu_write);
+//   endsequence
+
+//   property P1_CPU_read_request_to_cache;
+//     @(posedge clk)
+//       disable iff (rst)  P1_CPU_read_request_to_cache_sequence |-> cache_Request && (!cache_ReadWrite);
+//   endproperty
+
+//   // property CPU_read_request_to_cache_not_ready;
+//   //   @(posedge clk)
+//   //     disable iff (rst) (cpu_req != 'b0) ##0 (cache_Request == 'b0) ##0 (fsm_cs != READY) |->
+//   //               (cpu_req != 'b0) ##[*] (cpu_req != 'b0) ##0 (cache_Request != 'b0) ##0 (fsm_cs == READY);
+//   // endproperty
+
+//   sequence P2_CPU_write_request_to_cache_sequence;
+//     (fsm_cs == READY) && cpu_req && cpu_write;
+//   endsequence
+
+//   property P2_CPU_write_request_to_cache;
+//     @(posedge clk)
+//       disable iff (rst) P2_CPU_write_request_to_cache_sequence |-> cache_Request && cache_ReadWrite;
+//   endproperty
+
+//   property P3_CPU_read_request_cache_Hit_stall_until_cache_response;
+//     @(posedge clk)
+//       disable iff (rst) P1_CPU_read_request_to_cache_sequence ##0 cache_Hit |-> cpu_got;
+//   endproperty
+
+
+//   property P4_CPU_read_request_cache_Miss_stall_until_cache_response;
+//     @(posedge clk)
+//       disable iff (rst) P1_CPU_read_request_to_cache_sequence ##0 cache_Miss ##1 mem_rdy && !cpu_write ##1 mem_rstb |-> ##[*] cpu_got;
+//   endproperty
+
+
+//   property P5_CPU_write_request_stall_until_cache_response;
+//     @(posedge clk)
+//       disable iff (rst) P2_CPU_write_request_to_cache_sequence ##1 mem_rdy && cpu_write |-> ##[*] cpu_got;
+//   endproperty
+
+
+//   property P6_CPU_request_gets_eventually_granted_by_cache;
+//     @(posedge clk)
+//       disable iff (rst) $rose(cpu_req) && $rose(cache_Request) |-> ##[*] cpu_got;
+//   endproperty
+
+
+
+//   // -------------------------------------------------------------------------------------
+//   // -- Properties for Cache Parallel Tag Comparison Unit (For cache Hit/Miss behaviour)
+//   // -------------------------------------------------------------------------------------
+
+//   sequence C1_cache_Read_Request_leads_to_cache_Hit_sequence;
+//     P1_CPU_read_request_to_cache_sequence ##0 (cache_Request && !cache_ReadWrite && (|TagHits_signal) &&
+//     (TagMemory_signal[(onehot2bin(TagHits_signal))][unsigned'(Address_Index_signal)] == Address_Tag_signal) &&
+//     ValidMemory_signal[(onehot2bin(TagHits_signal))][unsigned'(Address_Index_signal)]);
+//   endsequence
+
+//   property C1_cache_Read_Request_leads_to_cache_Hit;
+//     @(posedge clk)
+//       disable iff (rst) C1_cache_Read_Request_leads_to_cache_Hit_sequence |-> cache_Hit;
+//   endproperty
+
+
+
+//   sequence C2_cache_Read_Request_leads_to_cache_Miss_sequence;
+//     P1_CPU_read_request_to_cache_sequence ##0 (cache_Request && !cache_ReadWrite && !(|TagHits_signal) &&
+//     ((TagMemory_signal[(onehot2bin(TagHits_signal))][unsigned'(Address_Index_signal)] != Address_Tag_signal) ||
+//       (!ValidMemory_signal[(onehot2bin(TagHits_signal))][unsigned'(Address_Index_signal)])));
+//   endsequence
+
+//   property C2_cache_Read_Request_leads_to_cache_Miss;
+//     @(posedge clk)
+//       disable iff (rst) C2_cache_Read_Request_leads_to_cache_Miss_sequence |-> cache_Miss;
+//   endproperty
+
+
+
+//   sequence C3_cache_Missed_Read_Request_gets_granted_by_Main_Memory_and_access_is_complete_sequence;
+//     (fsm_cs == ACCESS_MEM) && mem_req && mem_rdy && !cpu_write ##1 mem_rstb;
+//   endsequence
+
+//   property C3_cache_Missed_Read_Request_gets_granted_by_Main_Memory_and_access_is_complete;
+//     @(posedge clk)
+//       disable iff (rst) C3_cache_Missed_Read_Request_gets_granted_by_Main_Memory_and_access_is_complete_sequence |-> cpu_got;
+//   endproperty
+
+
+//   // sequence C4_cache_Replace_gets_activated_when_reading_from_memory_sequence;
+//   //   (fsm_cs == READING_MEM) && mem_rstb && cache_Replace;
+//   // endsequence
+
+//   // property C4_cache_Replace_gets_activated_when_reading_from_memory;
+//   //   @(posedge clk)
+//   //     disable iff (rst) C4_cache_Replace_gets_activated_when_reading_from_memory_sequence |-> true;
+//   // endproperty
+
+//   // A_C4_cache_Replace_gets_activated_when_reading_from_memory: assert property (C4_cache_Replace_gets_activated_when_reading_from_memory);
+
+
+//   // sequence C5_cache_Replace_not_activated_in_other_states_sequence;
+//   //   ((fsm_cs == READY) || (fsm_cs == ACCESS_MEM)) && !cache_Replace;
+//   // endsequence
+
+//   // property C5_cache_Replace_not_activated_in_other_states;
+//   //   @(posedge clk)
+//   //     disable iff (rst) C5_cache_Replace_not_activated_in_other_states_sequence |-> true;
+//   // endproperty
+
+//   // A_C5_cache_Replace_not_activated_in_other_states: assert property (C5_cache_Replace_not_activated_in_other_states);
+
+//   // sequence C6_cache_Invalidate_not_activated_in_READY_state_sequence;
+//   //   (fsm_cs == READY) && !cache_Invalidate;
+//   // endsequence
+
+//   // property C6_cache_Invalidate_not_activated_in_READY_state;
+//   //   @(posedge clk)
+//   //     disable iff (rst) C6_cache_Invalidate_not_activated_in_READY_state_sequence |-> true;
+//   // endproperty
+
+//   // A_C6_cache_Invalidate_not_activated_in_READY_state: assert property (C6_cache_Invalidate_not_activated_in_READY_state);
+
+
+//   // --------------------------------------------------
+//   // -- Properties for Cache to Main Memory interface
+//   // --------------------------------------------------
+
+//   // property Mem_req_always_high_in_fsm_state_ACCESS_MEM;
+// //   @(posedge clk)
+// //     disable iff (rst) (fsm_cs == ACCESS_MEM) |-> mem_req;
+//   // endproperty
+
+
+//   // property cpu_write_always_equal_to_mem_write;
+// //   @(posedge clk)
+// //     disable iff (rst) cpu_write |-> mem_write;
+//   // endproperty
+
+//  // property cpu_read_request_cache_Miss;
+//  //  @(posedge clk)
+//  //    disable iff (rst) $rose(cpu_req) && !cpu_write && cache_Miss ##[*] $stable(cpu_req) && $stable(cpu_write) && !cpu_write && $stable(cache_Miss) && mem_rdy ##1
+//  //             (cache_LineIn == mem_rdata) |-> (cache_LineIn == mem_rdata);
+//  // endproperty
+
+
+//   // property M1_cache_waits_for_Main_memory;
+//   //   @(posedge clk)
+//   //     disable iff (rst) (fsm_cs_vec == ACCESS_MEM) && mem_req && !mem_rdy && !cpu_got |-> true;
+//   // endproperty
+
+//   // A_M1_cache_waits_for_Main_memory: assert property (M1_cache_waits_for_Main_memory);
+
+//   // sequence M2_cache_read_request_to_Main_memory_sequence;
+//   //   (fsm_cs_vec == ACCESS_MEM) && mem_req && mem_rdy && !cpu_write;
+//   // endsequence
+
+//   // property M2_cache_read_request_to_Main_memory;
+//   //   @(posedge clk)
+//   //     disable iff (rst) M2_cache_read_request_to_Main_memory_sequence |-> true;
+//   // endproperty
+
+//   // A_M2_cache_read_request_to_Main_memory: assert property (M2_cache_read_request_to_Main_memory);
+
+//   // property M3_cache_write_request_to_Main_memory;
+//   //   @(posedge clk)
+//   //     disable iff (rst) (fsm_cs_vec == ACCESS_MEM) && mem_req && mem_rdy && cpu_write && cpu_got |-> true;
+//   // endproperty
+
+//   // A_M3_cache_write_request_to_Main_memory: assert property (M3_cache_write_request_to_Main_memory);
+
+//   // More properties to be added!
+
+
+//   // ------------------------------------------------------------------------------------------------
+//   // -- Properties for checking cache functionality (functional properties)
+//   // ------------------------------------------------------------------------------------------------
+
+//   // Aux code for property "F1_written_data_to_memory_should_be_eventually_able_to_be_read"
+
+//   //logic [CPU_DATA_BITS-1:0] data_written_to_memory;
+
+//   //assign data_written_to_memory[CPU_DATA_BITS-1:0] = cpu_wdata[CPU_DATA_BITS-1:0];
+
+//   // End of Aux code for property "F1_written_data_to_memory_should_be_eventually_able_to_be_read"
+
+//   // If we are writing data to memory, eventually we should be able to read it!
+//   // property F1_written_data_to_memory_should_be_eventually_able_to_be_read;
+//   //   @(posedge clk)
+//   //     disable iff (rst) $rose(cpu_req) && $rose(cpu_write) && (data_written_to_memory == cpu_wdata) |->
+//   //               ##[*] $rose(cpu_req) && $fell(cpu_write) ##[*] (cpu_rdata[CPU_DATA_BITS-1:0] == data_written_to_memory[CPU_DATA_BITS-1:0]);
+//   // endproperty
+
+
+
+//   // ------------------------------------------------------------------------------------------------
+//   // -- Properties for modeling cache side-channel attacks (security threats / security properties)
+//   // ------------------------------------------------------------------------------------------------
+
+
+//   // -- Read-based Prime+Probe attack:
+//   // -- Best case: ASSOCIATIVITY clk cycles for Prime and ASSOCIATIVITY clk cycles for Probe, plus attacker's waiting time for victim to access memory
+//   // -- Best case: 3 x ASSOCIATIVITY - 2 clk cycles for Prime and 3 x ASSOCIATIVITY - 2 clk cycles for Probe, plus attacker's waiting time for victim to access memory
+//   // -----------------------------------------------------------------------------------------------------------------------------------------------------------
+
+//   localparam RATIO = MEM_DATA_BITS/CPU_DATA_BITS;  // Ratio 1:n between CPU data bus and cache-line size (memory data bus)
+//   localparam LOWER_ADDR_BITS = $clog2(RATIO);    // Number of address bits identifying the CPU data word within a cache line (memory word)
+//   localparam WAY_BITS = $clog2(ASSOCIATIVITY);
+//   localparam SET_BITS = $clog2(CACHE_SETS);
+
+
+//   property S1_Read_an_entire_set_All_Hits;
+//     @(posedge clk)
+//    disable iff (rst) $rose(cpu_req) && !cpu_write && (cpu_addr == 0) && cache_Hit && cpu_got ##1
+//                   (cpu_req  && !cpu_write && (cpu_addr[$high(cpu_addr):LOWER_ADDR_BITS] == $past(cpu_addr[$high(cpu_addr):LOWER_ADDR_BITS]) + CACHE_SETS) && cache_Hit && cpu_got) [*(ASSOCIATIVITY-1)] |-> cpu_got;
+//   endproperty
+
+
+//   property S2_Read_an_entire_set_All_Misses;
+//     @(posedge clk)
+//    disable iff (rst) $rose(cpu_req) && !cpu_write && (cpu_addr == 0) && cache_Miss ##1 !cpu_write && mem_rdy && $stable(cpu_addr) ##1 mem_rstb && cpu_got && $stable(cpu_addr) ##1
+//                   (cpu_req  && !cpu_write && (cpu_addr[$high(cpu_addr):LOWER_ADDR_BITS] == $past(cpu_addr[$high(cpu_addr):LOWER_ADDR_BITS]) + CACHE_SETS) && cache_Miss ##1 !cpu_write && mem_rdy && $stable(cpu_addr) ##1 mem_rstb && cpu_got && $stable(cpu_addr)) [*(ASSOCIATIVITY-1)] |-> cpu_got;
+//   endproperty
+
+
+//   property S3_Read_an_entire_set_one_Miss_others_Hit;
+//     @(posedge clk)
+//       disable iff (rst) $rose(cpu_req) && !cpu_write && (cpu_addr == 0) && cache_Miss ##1 $stable(cpu_addr) && cpu_got ##1
+//                   (cpu_req && !cpu_write && (cpu_addr[$high(cpu_addr):LOWER_ADDR_BITS] == $past(cpu_addr[$high(cpu_addr):LOWER_ADDR_BITS]) + CACHE_SETS) && cache_Hit && cpu_got) [*(ASSOCIATIVITY-1)] |-> cpu_got;
+//   endproperty
+
+
+//   property S4_Read_entire_cache_lines_All_Hits;
+//     @(posedge clk)
+//    disable iff (rst) $rose(cpu_req) && !cpu_write && (cpu_addr == 0) && cache_Hit && cpu_got ##1
+//                   (cpu_req  && !cpu_write && (cpu_addr[LOWER_ADDR_BITS+SET_BITS+WAY_BITS-1:LOWER_ADDR_BITS] == $past(cpu_addr[LOWER_ADDR_BITS+SET_BITS+WAY_BITS-1:LOWER_ADDR_BITS]) + 1) && cache_Hit && cpu_got) [*(CACHE_LINES-1)] |-> cpu_got;
+//   endproperty
+
+
+//   property S5_Read_entire_cache_lines_All_Misses;
+//     @(posedge clk)
+//    disable iff (rst) $rose(cpu_req) && !cpu_write && (cpu_addr == 0) && cache_Miss ##[*] $stable(cpu_addr) && cpu_got ##1
+//                   (cpu_req  && !cpu_write && (cpu_addr[LOWER_ADDR_BITS+SET_BITS+WAY_BITS-1:LOWER_ADDR_BITS] == $past(cpu_addr[LOWER_ADDR_BITS+SET_BITS+WAY_BITS-1:LOWER_ADDR_BITS]) + 1) && cache_Miss ##[*] $stable(cpu_addr) && cpu_got) [*(CACHE_LINES-1)] |-> cpu_got;
+//   endproperty
+
+
+//   property S6_Read_entire_cache_lines_one_Miss_others_Hit;
+//     @(posedge clk)
+//    disable iff (rst) $rose(cpu_req) && !cpu_write && (cpu_addr == 0) && cache_Miss ##1 $stable(cpu_addr) && cpu_got ##1
+//                   (cpu_req  && !cpu_write && (cpu_addr[LOWER_ADDR_BITS+SET_BITS+WAY_BITS-1:LOWER_ADDR_BITS] == $past(cpu_addr[LOWER_ADDR_BITS+SET_BITS+WAY_BITS-1:LOWER_ADDR_BITS]) + 1) && cache_Hit && cpu_got) [*(CACHE_LINES-1)] |-> cpu_got;
+//   endproperty
+
+
+
+//   // Assertions for the specified properties
+//   A_P1_CPU_read_request_to_cache: assert property (P1_CPU_read_request_to_cache);
+//   A_P2_CPU_write_request_to_cache: assert property (P2_CPU_write_request_to_cache);
+//   A_P3_CPU_read_request_cache_Hit_stall_until_cache_response: assert property (P3_CPU_read_request_cache_Hit_stall_until_cache_response);
+//   A_P4_CPU_read_request_cache_Miss_stall_until_cache_response: assert property (P4_CPU_read_request_cache_Miss_stall_until_cache_response);
+//   A_P5_CPU_write_request_stall_until_cache_response: assert property (P5_CPU_write_request_stall_until_cache_response);
+//   A_P6_CPU_request_gets_eventually_granted_by_cache: assert property (P6_CPU_request_gets_eventually_granted_by_cache);
+
+//   A_C1_cache_Read_Request_leads_to_cache_Hit: assert property (C1_cache_Read_Request_leads_to_cache_Hit);
+//   A_C2_cache_Read_Request_leads_to_cache_Miss : assert property (C2_cache_Read_Request_leads_to_cache_Miss);
+//   A_C3_cache_Missed_Read_Request_gets_granted_by_Main_Memory_and_access_is_complete: assert property (C3_cache_Missed_Read_Request_gets_granted_by_Main_Memory_and_access_is_complete);
+
+//   // A_CPU_read_request_to_cache_not_ready: assert property (CPU_read_request_to_cache_not_ready);
+//   // A_Mem_req_always_high_in_fsm_state_ACCESS_MEM: assert property (Mem_req_always_high_in_fsm_state_ACCESS_MEM);
+//   // A_cpu_write_always_equal_to_mem_write: assert property (cpu_write_always_equal_to_mem_write);
+//   // A_cpu_read_request_cache_Miss: assert property (cpu_read_request_cache_Miss);
+
+//   // A_F1_written_data_to_memory_should_be_eventually_able_to_be_read: assert property (F1_written_data_to_memory_should_be_eventually_able_to_be_read);
+
+//   A_S1_Read_an_entire_set_All_Hits: assert property (S1_Read_an_entire_set_All_Hits);
+//   A_S2_Read_an_entire_set_All_Misses: assert property (S2_Read_an_entire_set_All_Misses);
+//   A_S3_Read_an_entire_set_one_Miss_others_Hit: assert property (S3_Read_an_entire_set_one_Miss_others_Hit);
+//   A_S4_Read_entire_cache_lines_All_Hits: assert property (S4_Read_entire_cache_lines_All_Hits);
+//   A_S5_Read_entire_cache_lines_All_Misses: assert property (S5_Read_entire_cache_lines_All_Misses);
+//   A_S6_Read_entire_cache_lines_one_Miss_others_Hit: assert property (S6_Read_entire_cache_lines_one_Miss_others_Hit);
+
+endmodule // cache_cpu_verification_module
+
+
